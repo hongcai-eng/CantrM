@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">返回列表</a>
+    <a href="{{ url_for('edit_contract', id=contract.id) }}" class="btn btn-primary">编辑合同</a>
+</div>
+
+<h2>{{ contract.project_name }}</h2>
+
+<h3>基础信息</h3>
+<table>
+    <tr><th>客户名称</th><td>{{ contract.customer_name }}</td></tr>
+    <tr><th>项目名称</th><td>{{ contract.project_name }}</td></tr>
+    <tr><th>型号</th><td>{{ contract.model }}</td></tr>
+    <tr><th>单位</th><td>{{ contract.unit }}</td></tr>
+    <tr><th>数量</th><td>{{ contract.quantity }}</td></tr>
+    <tr><th>单价</th><td>¥{{ "%.2f"|format(contract.unit_price) if contract.unit_price else '' }}</td></tr>
+    <tr><th>合同总价</th><td>¥{{ "%.2f"|format(contract.total_price) }}</td></tr>
+    <tr><th>发票税率</th><td>{{ contract.tax_rate }}%</td></tr>
+    <tr><th>合同类型</th><td>{{ contract.contract_type }}</td></tr>
+    <tr><th>具体子类</th><td>{{ contract.sub_type }}</td></tr>
+    <tr><th>项目人员</th><td>{{ contract.project_staff }}</td></tr>
+    <tr><th>销售人员</th><td>{{ contract.sales_staff }}</td></tr>
+    <tr><th>状态</th><td>{{ contract.status }}</td></tr>
+    <tr><th>合同文件</th><td>{% if contract.file_path %}<a href="{{ url_for('download_file', filename=contract.file_path) }}">下载</a>{% endif %}</td></tr>
+</table>
+
+<h3>收付款记录</h3>
+<form method="POST" action="{{ url_for('add_payment', id=contract.id) }}" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+    <div class="form-row">
+        <div class="form-group">
+            <label>金额*</label>
+            <input type="number" step="0.01" name="amount" required>
+        </div>
+        <div class="form-group">
+            <label>日期*</label>
+            <input type="date" name="payment_date" required>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>类型</label>
+            <select name="payment_type">
+                <option value="收款">收款</option>
+                <option value="付款">付款</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>备注</label>
+            <input type="text" name="note">
+        </div>
+    </div>
+    <button type="submit" class="btn btn-success">添加</button>
+</form>
+<table>
+    <thead><tr><th>日期</th><th>类型</th><th>金额</th><th>备注</th></tr></thead>
+    <tbody>
+        {% for payment in contract.payments %}
+        <tr>
+            <td>{{ payment.payment_date }}</td>
+            <td>{{ payment.payment_type }}</td>
+            <td>¥{{ "%.2f"|format(payment.amount) }}</td>
+            <td>{{ payment.note }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>交付记录</h3>
+<form method="POST" action="{{ url_for('add_delivery', id=contract.id) }}" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+    <div class="form-row">
+        <div class="form-group">
+            <label>交付日期*</label>
+            <input type="date" name="delivery_date" required>
+        </div>
+        <div class="form-group">
+            <label>交付内容</label>
+            <input type="text" name="content">
+        </div>
+    </div>
+    <div class="form-group">
+        <label>备注</label>
+        <input type="text" name="note">
+    </div>
+    <button type="submit" class="btn btn-success">添加</button>
+</form>
+<table>
+    <thead><tr><th>日期</th><th>内容</th><th>备注</th></tr></thead>
+    <tbody>
+        {% for delivery in contract.deliveries %}
+        <tr>
+            <td>{{ delivery.delivery_date }}</td>
+            <td>{{ delivery.content }}</td>
+            <td>{{ delivery.note }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>发票记录</h3>
+<form method="POST" action="{{ url_for('add_invoice', id=contract.id) }}" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+    <div class="form-row">
+        <div class="form-group">
+            <label>金额*</label>
+            <input type="number" step="0.01" name="amount" required>
+        </div>
+        <div class="form-group">
+            <label>收到日期*</label>
+            <input type="date" name="received_date" required>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>发票号</label>
+            <input type="text" name="invoice_number">
+        </div>
+        <div class="form-group">
+            <label>备注</label>
+            <input type="text" name="note">
+        </div>
+    </div>
+    <button type="submit" class="btn btn-success">添加</button>
+</form>
+<table>
+    <thead><tr><th>日期</th><th>发票号</th><th>金额</th><th>备注</th></tr></thead>
+    <tbody>
+        {% for invoice in contract.invoices %}
+        <tr>
+            <td>{{ invoice.received_date }}</td>
+            <td>{{ invoice.invoice_number }}</td>
+            <td>¥{{ "%.2f"|format(invoice.amount) }}</td>
+            <td>{{ invoice.note }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

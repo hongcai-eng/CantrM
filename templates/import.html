@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>导入合同数据</h2>
+<div style="background: #f8f9fa; padding: 20px; border-radius: 4px; margin-bottom: 20px;">
+    <h3>Excel格式要求</h3>
+    <p>请确保Excel文件包含以下列名（顺序不限）：</p>
+    <ul>
+        <li>客户名称*（必填）</li>
+        <li>项目名称*（必填）</li>
+        <li>合同总价*（必填）</li>
+        <li>型号、单位、数量、单价、发票税率</li>
+        <li>合同类型、具体子类</li>
+        <li>项目人员、销售人员</li>
+        <li>状态（默认：进行中）</li>
+    </ul>
+</div>
+
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group">
+        <label>选择Excel文件</label>
+        <input type="file" name="excel_file" accept=".xlsx,.xls" required>
+    </div>
+    <button type="submit" class="btn btn-success">开始导入</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">取消</a>
+</form>
+{% endblock %}

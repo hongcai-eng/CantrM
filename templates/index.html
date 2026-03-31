@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('new_contract') }}" class="btn btn-primary">新建合同</a>
+    <a href="{{ url_for('import_contracts') }}" class="btn btn-success">导入Excel</a>
+</div>
+
+{% if alerts %}
+<div class="alert alert-warning">
+    <strong>收付款提醒：</strong>
+    {% for alert in alerts %}
+    <div>{{ alert }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<table>
+    <thead>
+        <tr>
+            <th>项目名称</th>
+            <th>客户名称</th>
+            <th>合同总价</th>
+            <th>合同类型</th>
+            <th>销售人员</th>
+            <th>状态</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for contract in contracts %}
+        <tr>
+            <td>{{ contract.project_name }}</td>
+            <td>{{ contract.customer_name }}</td>
+            <td>¥{{ "%.2f"|format(contract.total_price) }}</td>
+            <td>{{ contract.contract_type }}</td>
+            <td>{{ contract.sales_staff }}</td>
+            <td>{{ contract.status }}</td>
+            <td>
+                <a href="{{ url_for('view_contract', id=contract.id) }}" class="btn btn-secondary">查看</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
