@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{% if user %}编辑用户{% else %}添加用户{% endif %}</h2>
+<form method="POST">
+    <div class="form-group">
+        <label>用户名</label>
+        <input type="text" name="username" value="{{ user.username if user else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label>密码{% if user %}（留空不修改）{% endif %}</label>
+        <input type="password" name="password" {% if not user %}required{% endif %}>
+    </div>
+    <div class="form-group">
+        <label>角色</label>
+        <select name="role" required>
+            {% if is_superadmin %}
+            <option value="超级管理员" {% if user and user.role == '超级管理员' %}selected{% endif %}>超级管理员</option>
+            {% endif %}
+            <option value="管理人员" {% if user and user.role == '管理人员' %}selected{% endif %}>管理人员</option>
+            <option value="合同负责人" {% if user and user.role == '合同负责人' %}selected{% endif %}>合同负责人</option>
+            <option value="合同执行人员" {% if user and user.role == '合同执行人员' %}selected{% endif %}>合同执行人员</option>
+            <option value="合同审核监督人员" {% if user and user.role == '合同审核监督人员' %}selected{% endif %}>合同审核监督人员</option>
+            <option value="录入人员" {% if user and user.role == '录入人员' %}selected{% endif %}>录入人员</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label>权限</label>
+        {% set perms = user.permissions.split(',') if user and user.permissions else [] %}
+        <label><input type="checkbox" name="permissions" value="增加" {% if '增加' in perms %}checked{% endif %}> 增加</label>
+        <label><input type="checkbox" name="permissions" value="删除" {% if '删除' in perms %}checked{% endif %}> 删除</label>
+        <label><input type="checkbox" name="permissions" value="修改" {% if '修改' in perms %}checked{% endif %}> 修改</label>
+        <label><input type="checkbox" name="permissions" value="查阅" {% if '查阅' in perms %}checked{% endif %}> 查阅</label>
+        <label><input type="checkbox" name="permissions" value="上传" {% if '上传' in perms %}checked{% endif %}> 上传</label>
+        <label><input type="checkbox" name="permissions" value="下载" {% if '下载' in perms %}checked{% endif %}> 下载</label>
+    </div>
+    <button type="submit" class="btn btn-primary">保存</button>
+    <a href="{{ url_for('users') }}" class="btn btn-secondary">取消</a>
+</form>
+{% endblock %}

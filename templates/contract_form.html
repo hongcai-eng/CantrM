@@ -5,7 +5,9 @@
     <div class="form-row">
         <div class="form-group">
             <label>客户名称*</label>
-            <input type="text" name="customer_name" value="{{ contract.customer_name if contract else '' }}" required>
+            <input type="text" name="customer_name" id="customerName" value="{{ contract.customer_name if contract else '' }}" required autocomplete="off">
+            <div id="customerSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto;"></div>
+            <small style="color:#888;">可从<a href="{{ url_for('customers') }}" target="_blank">客户管理</a>中选择，输入新名称将自动同步</small>
         </div>
         <div class="form-group">
             <label>项目名称*</label>
@@ -14,12 +16,21 @@
     </div>
     <div class="form-row">
         <div class="form-group">
+            <label>产品名称</label>
+            <input type="text" name="product_name" id="productNameInput" value="{{ contract.product_name if contract else '' }}" autocomplete="off" placeholder="输入或从产品库选择">
+            <div id="productSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto;"></div>
+            <small style="color:#888;">可从<a href="{{ url_for('products') }}" target="_blank">产品管理</a>中选择，选中后自动填入型号/单位</small>
+        </div>
+        <div class="form-group"></div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
             <label>型号</label>
-            <input type="text" name="model" value="{{ contract.model if contract else '' }}">
+            <input type="text" name="model" id="modelInput" value="{{ contract.model if contract else '' }}">
         </div>
         <div class="form-group">
             <label>单位</label>
-            <input type="text" name="unit" value="{{ contract.unit if contract else '' }}">
+            <input type="text" name="unit" id="unitInput" value="{{ contract.unit if contract else '' }}">
         </div>
     </div>
     <div class="form-row">
@@ -53,19 +64,33 @@
             </select>
         </div>
         <div class="form-group">
-            <label>具体子类</label>
-            <input type="text" name="sub_type" value="{{ contract.sub_type if contract else '' }}" placeholder="如：硬件销售、软件采购">
+            <label>业务类型</label>
+            <select name="business_type">
+                <option value="销售" {% if contract and contract.business_type == '销售' %}selected{% elif not contract %}selected{% endif %}>销售</option>
+                <option value="采购" {% if contract and contract.business_type == '采购' %}selected{% endif %}>采购</option>
+            </select>
         </div>
     </div>
     <div class="form-row">
         <div class="form-group">
-            <label>项目人员</label>
+            <label>具体子类</label>
+            <input type="text" name="sub_type" value="{{ contract.sub_type if contract else '' }}" placeholder="如：硬件销售、软件采购">
+        </div>
+        <div class="form-group"></div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>项目负责人</label>
             <input type="text" name="project_staff" value="{{ contract.project_staff if contract else '' }}" placeholder="多人用逗号分隔">
         </div>
         <div class="form-group">
             <label>销售人员</label>
             <input type="text" name="sales_staff" value="{{ contract.sales_staff if contract else '' }}">
         </div>
+    </div>
+    <div class="form-group">
+        <label>合同签订日期</label>
+        <input type="date" name="signing_date" value="{{ contract.signing_date if contract else '' }}">
     </div>
     {% if contract %}
     <div class="form-group">
@@ -78,11 +103,108 @@
     {% endif %}
     <div class="form-group">
         <label>合同文件(PDF/扫描件)</label>
-        <input type="file" name="contract_file" accept=".pdf,.jpg,.jpeg,.png">
+        <input type="file" name="contract_file" accept=".pdf,.jpg,.jpeg,.png" id="contractFile" onchange="previewFile(this, 'contractPreview')">
         {% if contract and contract.file_path %}
-        <small>当前文件: <a href="{{ url_for('download_file', filename=contract.file_path) }}">{{ contract.file_path }}</a></small>
+        <small>当前文件: <a href="{{ url_for('preview_file', filename=contract.file_path) }}" target="_blank">点击预览</a> | <a href="{{ url_for('download_file', filename=contract.file_path) }}">下载</a></small>
+        <div id="contractPreview" style="margin-top:10px;">
+            {% if contract.file_path.endswith(('.jpg','.jpeg','.png')) %}
+            <img src="{{ url_for('preview_file', filename=contract.file_path) }}" style="max-width:300px;">
+            {% elif contract.file_path.endswith('.pdf') %}
+            <iframe src="{{ url_for('preview_file', filename=contract.file_path) }}" width="100%" height="400px" style="border:1px solid #ddd;"></iframe>
+            {% endif %}
+        </div>
+        {% else %}
+        <div id="contractPreview" style="margin-top:10px;"></div>
         {% endif %}
     </div>
+    <script>
+    function previewFile(input, previewId) {
+        const preview = document.getElementById(previewId);
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (file.type.startsWith('image/')) {
+                    preview.innerHTML = '<img src="' + e.target.result + '" style="max-width:300px;">';
+                } else if (file.type === 'application/pdf') {
+                    preview.innerHTML = '<embed src="' + e.target.result + '" type="application/pdf" width="100%" height="400px">';
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // 客户名称自动搜索
+    const customerInput = document.getElementById('customerName');
+    const customerSuggestions = document.getElementById('customerSuggestions');
+    let customerTimeout;
+    customerInput.addEventListener('input', function() {
+        clearTimeout(customerTimeout);
+        const query = this.value;
+        if (query.length < 1) {
+            customerSuggestions.style.display = 'none';
+            return;
+        }
+        customerTimeout = setTimeout(() => {
+            fetch('/api/customers/search?q=' + encodeURIComponent(query))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        customerSuggestions.innerHTML = data.map(c =>
+                            '<div style="padding:8px; cursor:pointer;" onclick="selectCustomer(\'' + c.name + '\')">' + c.name + (c.province ? ' (' + c.province + ')' : '') + '</div>'
+                        ).join('');
+                        customerSuggestions.style.display = 'block';
+                    } else {
+                        customerSuggestions.style.display = 'none';
+                    }
+                });
+        }, 300);
+    });
+
+    function selectCustomer(name) {
+        customerInput.value = name;
+        customerSuggestions.style.display = 'none';
+    }
+
+    // 产品名称自动搜索
+    const productInput = document.getElementById('productNameInput');
+    const productSuggestions = document.getElementById('productSuggestions');
+    let productTimeout;
+    productInput.addEventListener('input', function() {
+        clearTimeout(productTimeout);
+        const query = this.value;
+        if (query.length < 1) {
+            productSuggestions.style.display = 'none';
+            return;
+        }
+        productTimeout = setTimeout(() => {
+            fetch('/api/products/search?q=' + encodeURIComponent(query))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        productSuggestions.innerHTML = data.map(p =>
+                            '<div style="padding:8px; cursor:pointer;" onclick="selectProduct(\'' + p.name + '\', \'' + (p.model || '') + '\', \'' + (p.unit || '') + '\')">' + p.name + (p.model ? ' - ' + p.model : '') + '</div>'
+                        ).join('');
+                        productSuggestions.style.display = 'block';
+                    } else {
+                        productSuggestions.style.display = 'none';
+                    }
+                });
+        }, 300);
+    });
+
+    function selectProduct(name, model, unit) {
+        productInput.value = name;
+        if (model) document.getElementById('modelInput').value = model;
+        if (unit) document.getElementById('unitInput').value = unit;
+        productSuggestions.style.display = 'none';
+    }
+
+    document.addEventListener('click', function(e) {
+        if (!customerInput.contains(e.target)) customerSuggestions.style.display = 'none';
+        if (!productInput.contains(e.target)) productSuggestions.style.display = 'none';
+    });
+    </script>
     <button type="submit" class="btn btn-success">保存</button>
     <a href="{{ url_for('index') }}" class="btn btn-secondary">取消</a>
 </form>

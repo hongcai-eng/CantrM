@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>统计分析</h2>
+
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('export_statistics') }}?{{ request.query_string.decode() }}" class="btn btn-success">导出Excel</a>
+</div>
+
+<form method="GET" style="background:#f8f9fa; padding:15px; border-radius:6px; margin-bottom:20px;">
+    <div class="form-row">
+        <div class="form-group" style="position:relative;">
+            <label>项目负责人</label>
+            <input type="text" name="f_staff" id="staffSearch" value="{{ filters.f_staff }}" autocomplete="off">
+            <div id="staffSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto; width:100%;"></div>
+        </div>
+        <div class="form-group" style="position:relative;">
+            <label>客户名称</label>
+            <input type="text" name="f_customer" id="customerSearch" value="{{ filters.f_customer }}" autocomplete="off">
+            <div id="customerSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto; width:100%;"></div>
+        </div>
+        <div class="form-group">
+            <label>合同类型</label>
+            <select name="f_type">
+                <option value="">全部</option>
+                <option value="销售合同" {% if filters.f_type=='销售合同' %}selected{% endif %}>销售合同</option>
+                <option value="采购合同" {% if filters.f_type=='采购合同' %}selected{% endif %}>采购合同</option>
+                <option value="服务合同" {% if filters.f_type=='服务合同' %}selected{% endif %}>服务合同</option>
+                <option value="其他" {% if filters.f_type=='其他' %}selected{% endif %}>其他</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>业务类型</label>
+            <select name="f_business">
+                <option value="">全部</option>
+                <option value="销售" {% if filters.f_business=='销售' %}selected{% endif %}>销售</option>
+                <option value="采购" {% if filters.f_business=='采购' %}selected{% endif %}>采购</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>履约状态</label>
+            <select name="f_status">
+                <option value="">全部</option>
+                <option value="进行中" {% if filters.f_status=='进行中' %}selected{% endif %}>进行中</option>
+                <option value="已完成" {% if filters.f_status=='已完成' %}selected{% endif %}>已完成</option>
+                <option value="已终止" {% if filters.f_status=='已终止' %}selected{% endif %}>已终止</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>签订年份</label>
+            <select name="f_year">
+                <option value="">全部</option>
+                {% for year in available_years %}
+                <option value="{{ year }}" {% if filters.f_year == year|string %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">筛选</button>
+    <a href="{{ url_for('statistics') }}" class="btn btn-secondary">重置</a>
+</form>
+
+<script>
+// 项目负责人关键词搜索
+const staffInput = document.getElementById('staffSearch');
+const staffSugg = document.getElementById('staffSuggestions');
+let staffTimeout;
+staffInput.addEventListener('input', function() {
+    clearTimeout(staffTimeout);
+    const q = this.value;
+    if (q.length < 1) { staffSugg.style.display = 'none'; return; }
+    staffTimeout = setTimeout(() => {
+        fetch('/api/project_staff/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                if (data.length > 0) {
+                    staffSugg.innerHTML = data.map(s => '<div style="padding:8px;cursor:pointer;" onclick="staffInput.value=\'' + s + '\';staffSugg.style.display=\'none\';">' + s + '</div>').join('');
+                    staffSugg.style.display = 'block';
+                } else { staffSugg.style.display = 'none'; }
+            });
+    }, 300);
+});
+
+// 客户名称关键词搜索
+const custInput = document.getElementById('customerSearch');
+const custSugg = document.getElementById('customerSuggestions');
+let custTimeout;
+custInput.addEventListener('input', function() {
+    clearTimeout(custTimeout);
+    const q = this.value;
+    if (q.length < 1) { custSugg.style.display = 'none'; return; }
+    custTimeout = setTimeout(() => {
+        fetch('/api/customers/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                if (data.length > 0) {
+                    custSugg.innerHTML = data.map(c => '<div style="padding:8px;cursor:pointer;" onclick="custInput.value=\'' + c.name + '\';custSugg.style.display=\'none\';">' + c.name + '</div>').join('');
+                    custSugg.style.display = 'block';
+                } else { custSugg.style.display = 'none'; }
+            });
+    }, 300);
+});
+
+document.addEventListener('click', function(e) {
+    if (!staffInput.contains(e.target)) staffSugg.style.display = 'none';
+    if (!custInput.contains(e.target)) custSugg.style.display = 'none';
+});
+</script>
+
+<h3>按项目负责人统计</h3>
+<table>
+    <thead>
+        <tr>
+            <th>项目负责人</th>
+            <th>合同数量</th>
+            <th>合同总额</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for staff, count, total in stats.by_staff %}
+        <tr>
+            <td>{{ staff or '未指定' }}</td>
+            <td>{{ count }}</td>
+            <td>¥{{ "%.2f"|format(total or 0) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>按客户名称统计</h3>
+<table>
+    <thead>
+        <tr>
+            <th>客户名称</th>
+            <th>合同数量</th>
+            <th>合同总额</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for customer, count, total in stats.by_customer %}
+        <tr>
+            <td>{{ customer }}</td>
+            <td>{{ count }}</td>
+            <td>¥{{ "%.2f"|format(total or 0) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>按合同类型统计</h3>
+<table>
+    <thead>
+        <tr>
+            <th>合同类型</th>
+            <th>合同数量</th>
+            <th>合同总额</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for type, count, total in stats.by_type %}
+        <tr>
+            <td>{{ type or '未指定' }}</td>
+            <td>{{ count }}</td>
+            <td>¥{{ "%.2f"|format(total or 0) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>按业务类型统计</h3>
+<table>
+    <thead>
+        <tr>
+            <th>业务类型</th>
+            <th>合同数量</th>
+            <th>合同总额</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for type, count, total in stats.by_business %}
+        <tr>
+            <td>{{ type }}</td>
+            <td>{{ count }}</td>
+            <td>¥{{ "%.2f"|format(total or 0) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>按履约状态统计</h3>
+<table>
+    <thead>
+        <tr>
+            <th>状态</th>
+            <th>合同数量</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for status, count in stats.by_status %}
+        <tr>
+            <td>{{ status }}</td>
+            <td>{{ count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -11,22 +11,38 @@
 <table>
     <tr><th>客户名称</th><td>{{ contract.customer_name }}</td></tr>
     <tr><th>项目名称</th><td>{{ contract.project_name }}</td></tr>
+    <tr><th>合同签订日期</th><td>{{ contract.signing_date if contract.signing_date else '未填写' }}</td></tr>
     <tr><th>型号</th><td>{{ contract.model }}</td></tr>
     <tr><th>单位</th><td>{{ contract.unit }}</td></tr>
     <tr><th>数量</th><td>{{ contract.quantity }}</td></tr>
     <tr><th>单价</th><td>¥{{ "%.2f"|format(contract.unit_price) if contract.unit_price else '' }}</td></tr>
     <tr><th>合同总价</th><td>¥{{ "%.2f"|format(contract.total_price) }}</td></tr>
-    <tr><th>发票税率</th><td>{{ contract.tax_rate }}%</td></tr>
+    <tr><th>已付款</th><td>¥{{ "%.2f"|format(contract.get_total_paid()) }}</td></tr>
+    <tr><th>未付款</th><td style="color:red; font-weight:bold;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td></tr>
+    <tr><th>发票税率</th><td>{{ contract.tax_rate|notrailzero }}{% if contract.tax_rate %}%{% endif %}</td></tr>
     <tr><th>合同类型</th><td>{{ contract.contract_type }}</td></tr>
+    <tr><th>业务类型</th><td>{{ contract.business_type }}</td></tr>
     <tr><th>具体子类</th><td>{{ contract.sub_type }}</td></tr>
-    <tr><th>项目人员</th><td>{{ contract.project_staff }}</td></tr>
+    <tr><th>项目负责人</th><td>{{ contract.project_staff }}</td></tr>
     <tr><th>销售人员</th><td>{{ contract.sales_staff }}</td></tr>
-    <tr><th>状态</th><td>{{ contract.status }}</td></tr>
-    <tr><th>合同文件</th><td>{% if contract.file_path %}<a href="{{ url_for('download_file', filename=contract.file_path) }}">下载</a>{% endif %}</td></tr>
+    <tr><th>状态</th><td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td></tr>
+    <tr><th>合同文件</th><td>
+        {% if contract.file_path %}
+        <a href="{{ url_for('preview_file', filename=contract.file_path) }}" target="_blank">预览</a> |
+        <a href="{{ url_for('download_file', filename=contract.file_path) }}">下载</a>
+        <div style="margin-top:10px;">
+            {% if contract.file_path.endswith(('.jpg','.jpeg','.png')) %}
+            <img src="{{ url_for('preview_file', filename=contract.file_path) }}" style="max-width:400px;">
+            {% elif contract.file_path.endswith('.pdf') %}
+            <iframe src="{{ url_for('preview_file', filename=contract.file_path) }}" width="100%" height="500px" style="border:1px solid #ddd;"></iframe>
+            {% endif %}
+        </div>
+        {% endif %}
+    </td></tr>
 </table>
 
 <h3>收付款记录</h3>
-<form method="POST" action="{{ url_for('add_payment', id=contract.id) }}" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+<form method="POST" action="{{ url_for('add_payment', id=contract.id) }}" enctype="multipart/form-data" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
     <div class="form-row">
         <div class="form-group">
             <label>金额*</label>
@@ -50,10 +66,15 @@
             <input type="text" name="note">
         </div>
     </div>
+    <div class="form-group">
+        <label>回单文件</label>
+        <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png" onchange="previewFile(this, 'receiptPreview')">
+        <div id="receiptPreview" style="margin-top:10px;"></div>
+    </div>
     <button type="submit" class="btn btn-success">添加</button>
 </form>
 <table>
-    <thead><tr><th>日期</th><th>类型</th><th>金额</th><th>备注</th></tr></thead>
+    <thead><tr><th>日期</th><th>类型</th><th>金额</th><th>备注</th><th>回单</th></tr></thead>
     <tbody>
         {% for payment in contract.payments %}
         <tr>
@@ -61,13 +82,19 @@
             <td>{{ payment.payment_type }}</td>
             <td>¥{{ "%.2f"|format(payment.amount) }}</td>
             <td>{{ payment.note }}</td>
+            <td>
+                {% if payment.receipt_file %}
+                <a href="{{ url_for('preview_file', filename=payment.receipt_file) }}" target="_blank">预览</a> |
+                <a href="{{ url_for('download_file', filename=payment.receipt_file) }}">下载</a>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
 <h3>交付记录</h3>
-<form method="POST" action="{{ url_for('add_delivery', id=contract.id) }}" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+<form method="POST" action="{{ url_for('add_delivery', id=contract.id) }}" enctype="multipart/form-data" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
     <div class="form-row">
         <div class="form-group">
             <label>交付日期*</label>
@@ -82,23 +109,34 @@
         <label>备注</label>
         <input type="text" name="note">
     </div>
+    <div class="form-group">
+        <label>交付记录文件</label>
+        <input type="file" name="delivery_file" accept=".pdf,.jpg,.jpeg,.png" onchange="previewFile(this, 'deliveryPreview')">
+        <div id="deliveryPreview" style="margin-top:10px;"></div>
+    </div>
     <button type="submit" class="btn btn-success">添加</button>
 </form>
 <table>
-    <thead><tr><th>日期</th><th>内容</th><th>备注</th></tr></thead>
+    <thead><tr><th>日期</th><th>内容</th><th>备注</th><th>文件</th></tr></thead>
     <tbody>
         {% for delivery in contract.deliveries %}
         <tr>
             <td>{{ delivery.delivery_date }}</td>
             <td>{{ delivery.content }}</td>
             <td>{{ delivery.note }}</td>
+            <td>
+                {% if delivery.delivery_file %}
+                <a href="{{ url_for('preview_file', filename=delivery.delivery_file) }}" target="_blank">预览</a> |
+                <a href="{{ url_for('download_file', filename=delivery.delivery_file) }}">下载</a>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
 <h3>发票记录</h3>
-<form method="POST" action="{{ url_for('add_invoice', id=contract.id) }}" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+<form method="POST" action="{{ url_for('add_invoice', id=contract.id) }}" enctype="multipart/form-data" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
     <div class="form-row">
         <div class="form-group">
             <label>金额*</label>
@@ -115,23 +153,71 @@
             <input type="text" name="invoice_number">
         </div>
         <div class="form-group">
-            <label>备注</label>
-            <input type="text" name="note">
+            <label>开具状态</label>
+            <select name="invoice_status">
+                <option value="未开具">未开具</option>
+                <option value="已开具">已开具</option>
+                <option value="已作废">已作废</option>
+            </select>
         </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>发票类型</label>
+            <select name="invoice_type">
+                <option value="普票">普票</option>
+                <option value="专票">专票</option>
+            </select>
+        </div>
+        <div class="form-group"></div>
+    </div>
+    <div class="form-group">
+        <label>备注</label>
+        <input type="text" name="note">
+    </div>
+    <div class="form-group">
+        <label>发票文件</label>
+        <input type="file" name="invoice_file" accept=".pdf,.jpg,.jpeg,.png" onchange="previewFile(this, 'invoicePreview')">
+        <div id="invoicePreview" style="margin-top:10px;"></div>
     </div>
     <button type="submit" class="btn btn-success">添加</button>
 </form>
 <table>
-    <thead><tr><th>日期</th><th>发票号</th><th>金额</th><th>备注</th></tr></thead>
+    <thead><tr><th>日期</th><th>发票号</th><th>金额</th><th>发票类型</th><th>开具状态</th><th>备注</th><th>发票文件</th></tr></thead>
     <tbody>
         {% for invoice in contract.invoices %}
         <tr>
             <td>{{ invoice.received_date }}</td>
             <td>{{ invoice.invoice_number }}</td>
             <td>¥{{ "%.2f"|format(invoice.amount) }}</td>
+            <td>{{ invoice.invoice_type }}</td>
+            <td><span style="{% if invoice.invoice_status == '已开具' %}color:green;{% elif invoice.invoice_status == '已作废' %}color:red;{% else %}color:orange;{% endif %}font-weight:bold;">{{ invoice.invoice_status }}</span></td>
             <td>{{ invoice.note }}</td>
+            <td>
+                {% if invoice.invoice_file %}
+                <a href="{{ url_for('preview_file', filename=invoice.invoice_file) }}" target="_blank">预览</a> |
+                <a href="{{ url_for('download_file', filename=invoice.invoice_file) }}">下载</a>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+<script>
+function previewFile(input, previewId) {
+    const preview = document.getElementById(previewId);
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (file.type.startsWith('image/')) {
+                preview.innerHTML = '<img src="' + e.target.result + '" style="max-width:300px;">';
+            } else if (file.type === 'application/pdf') {
+                preview.innerHTML = '<embed src="' + e.target.result + '" type="application/pdf" width="100%" height="400px">';
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+}
+</script>
 {% endblock %}

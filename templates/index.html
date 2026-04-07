@@ -3,7 +3,129 @@
 <div style="margin-bottom: 20px;">
     <a href="{{ url_for('new_contract') }}" class="btn btn-primary">新建合同</a>
     <a href="{{ url_for('import_contracts') }}" class="btn btn-success">导入Excel</a>
+    <a href="{{ url_for('export_contracts') }}?{{ request.query_string.decode() }}" class="btn btn-secondary">导出Excel</a>
 </div>
+
+<div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+    <form method="GET" action="{{ url_for('index') }}">
+        <div class="form-row">
+            <div class="form-group" style="position:relative;">
+                <label>项目负责人</label>
+                <input type="text" name="project_staff" id="staffSearch" value="{{ request.args.get('project_staff', '') }}" autocomplete="off">
+                <div id="staffSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto; width:100%;"></div>
+            </div>
+            <div class="form-group" style="position:relative;">
+                <label>客户名称</label>
+                <input type="text" name="customer_name" id="customerSearch" value="{{ request.args.get('customer_name', '') }}" autocomplete="off">
+                <div id="customerSearchSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto; width:100%;"></div>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>合同类型</label>
+                <select name="contract_type">
+                    <option value="">全部</option>
+                    <option value="工程" {% if request.args.get('contract_type') == '工程' %}selected{% endif %}>工程</option>
+                    <option value="货物" {% if request.args.get('contract_type') == '货物' %}selected{% endif %}>货物</option>
+                    <option value="服务" {% if request.args.get('contract_type') == '服务' %}selected{% endif %}>服务</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>业务类型</label>
+                <select name="business_type">
+                    <option value="">全部</option>
+                    <option value="销售" {% if request.args.get('business_type') == '销售' %}selected{% endif %}>销售</option>
+                    <option value="采购" {% if request.args.get('business_type') == '采购' %}selected{% endif %}>采购</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>履约状态</label>
+                <select name="status">
+                    <option value="">全部</option>
+                    <option value="进行中" {% if request.args.get('status') == '进行中' %}selected{% endif %}>进行中</option>
+                    <option value="已完结" {% if request.args.get('status') == '已完结' %}selected{% endif %}>已完结</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>签订年份</label>
+                <select name="signing_year">
+                    <option value="">全部</option>
+                    {% for year in available_years %}
+                    <option value="{{ year }}" {% if request.args.get('signing_year') == year|string %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>发票状态</label>
+                <select name="invoice_status">
+                    <option value="">全部</option>
+                    <option value="已开具" {% if request.args.get('invoice_status') == '已开具' %}selected{% endif %}>已开具</option>
+                    <option value="未开具" {% if request.args.get('invoice_status') == '未开具' %}selected{% endif %}>未开具</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>预警信息</label>
+                <select name="alert">
+                    <option value="">全部</option>
+                    <option value="yes" {% if request.args.get('alert') == 'yes' %}selected{% endif %}>有预警</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">筛选</button>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">清除</a>
+    </form>
+</div>
+
+<script>
+// 项目负责人关键词搜索
+const staffInput = document.getElementById('staffSearch');
+const staffSugg = document.getElementById('staffSuggestions');
+let staffTimeout;
+staffInput.addEventListener('input', function() {
+    clearTimeout(staffTimeout);
+    const q = this.value;
+    if (q.length < 1) { staffSugg.style.display = 'none'; return; }
+    staffTimeout = setTimeout(() => {
+        fetch('/api/project_staff/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                if (data.length > 0) {
+                    staffSugg.innerHTML = data.map(s => '<div style="padding:8px;cursor:pointer;" onclick="staffInput.value=\'' + s + '\';staffSugg.style.display=\'none\';">' + s + '</div>').join('');
+                    staffSugg.style.display = 'block';
+                } else { staffSugg.style.display = 'none'; }
+            });
+    }, 300);
+});
+
+// 客户名称关键词搜索
+const custInput = document.getElementById('customerSearch');
+const custSugg = document.getElementById('customerSearchSuggestions');
+let custTimeout;
+custInput.addEventListener('input', function() {
+    clearTimeout(custTimeout);
+    const q = this.value;
+    if (q.length < 1) { custSugg.style.display = 'none'; return; }
+    custTimeout = setTimeout(() => {
+        fetch('/api/customers/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                if (data.length > 0) {
+                    custSugg.innerHTML = data.map(c => '<div style="padding:8px;cursor:pointer;" onclick="custInput.value=\'' + c.name + '\';custSugg.style.display=\'none\';">' + c.name + '</div>').join('');
+                    custSugg.style.display = 'block';
+                } else { custSugg.style.display = 'none'; }
+            });
+    }, 300);
+});
+
+document.addEventListener('click', function(e) {
+    if (!staffInput.contains(e.target)) staffSugg.style.display = 'none';
+    if (!custInput.contains(e.target)) custSugg.style.display = 'none';
+});
+</script>
 
 {% if alerts %}
 <div class="alert alert-warning">
@@ -20,6 +142,8 @@
             <th>项目名称</th>
             <th>客户名称</th>
             <th>合同总价</th>
+            <th>未付款</th>
+            <th>未开票</th>
             <th>合同类型</th>
             <th>销售人员</th>
             <th>状态</th>
@@ -32,11 +156,16 @@
             <td>{{ contract.project_name }}</td>
             <td>{{ contract.customer_name }}</td>
             <td>¥{{ "%.2f"|format(contract.total_price) }}</td>
+            <td style="color:red;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td>
+            <td style="color:orange;">¥{{ "%.2f"|format(contract.get_uninvoiced_amount()) }}</td>
             <td>{{ contract.contract_type }}</td>
             <td>{{ contract.sales_staff }}</td>
-            <td>{{ contract.status }}</td>
+            <td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td>
             <td>
                 <a href="{{ url_for('view_contract', id=contract.id) }}" class="btn btn-secondary">查看</a>
+                <form method="POST" action="{{ url_for('delete_contract', id=contract.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该合同？此操作不可恢复！')">删除</button>
+                </form>
             </td>
         </tr>
         {% endfor %}

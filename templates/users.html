@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>用户管理</h2>
+<a href="{{ url_for('new_user') }}" class="btn btn-primary">添加用户</a>
+
+<table>
+    <thead>
+        <tr>
+            <th>用户名</th>
+            <th>角色</th>
+            <th>权限</th>
+            <th>创建时间</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.username }}</td>
+            <td>{{ user.role }}</td>
+            <td>{{ user.permissions }}</td>
+            <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>
+                {% if user.username == 'superadmin' and session.get('username') != 'superadmin' %}
+                <span style="color:#999;">无权限</span>
+                {% else %}
+                <a href="{{ url_for('edit_user', id=user.id) }}" class="btn btn-secondary">编辑</a>
+                {% if user.username not in ['admin', 'superadmin'] %}
+                <form method="POST" action="{{ url_for('delete_user', id=user.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除？')">删除</button>
+                </form>
+                {% endif %}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

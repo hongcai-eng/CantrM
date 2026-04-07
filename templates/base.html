@@ -7,6 +7,10 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+        .nav { background: #333; padding: 10px 20px; margin: -20px -20px 20px -20px; }
+        .nav a { color: white; text-decoration: none; padding: 10px 15px; display: inline-block; }
+        .nav a:hover { background: #555; }
+        .nav .right { float: right; }
         .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h1, h2 { color: #333; margin-bottom: 20px; }
         .alert { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
@@ -16,6 +20,7 @@
         .btn-primary { background: #007bff; color: white; }
         .btn-success { background: #28a745; color: white; }
         .btn-secondary { background: #6c757d; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
         .btn:hover { opacity: 0.9; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
@@ -26,11 +31,30 @@
         input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
         textarea { min-height: 80px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .page-title { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+        .page-title img { height: 36px; width: auto; }
     </style>
 </head>
 <body>
+    <div class="nav">
+        <a href="{{ url_for('index') }}">合同列表</a>
+        <a href="{{ url_for('customers') }}">客户管理</a>
+        <a href="{{ url_for('products') }}">产品管理</a>
+        <a href="{{ url_for('statistics') }}">统计分析</a>
+        {% if session.role == '超级管理员' %}
+        <a href="{{ url_for('users') }}">用户管理</a>
+        <a href="{{ url_for('sysconfig') }}">系统配置</a>
+        {% endif %}
+        <span class="right">
+            <span style="color: white; padding: 10px;">{{ session.username }} ({{ session.role }})</span>
+            <a href="{{ url_for('logout') }}">退出</a>
+        </span>
+    </div>
     <div class="container">
-        <h1>合同管理系统</h1>
+        <div class="page-title">
+            {% if company_logo_file %}<img src="{{ url_for('static', filename=company_logo_file) }}" alt="logo">{% endif %}
+            <h1>{% if company_name %}{{ company_name }} - {% endif %}合同管理系统</h1>
+        </div>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}

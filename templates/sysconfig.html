@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>系统配置</h2>
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group">
+        <label>公司名称</label>
+        <input type="text" name="company_name" value="{{ configs.get('company_name', '') }}">
+    </div>
+    <div class="form-group">
+        <label>公司图标（上传图片文件）</label>
+        <input type="file" name="logo_file" accept="image/*" id="logoFile" onchange="previewLogo(this)">
+        {% if configs.get('company_logo_file') %}
+        <p style="margin-top: 10px;">当前图标：<img src="{{ url_for('static', filename=configs.get('company_logo_file')) }}" style="height: 40px; vertical-align: middle;" id="logoPreview"></p>
+        {% else %}
+        <div style="margin-top:10px;"><img id="logoPreview" style="max-height:80px; display:none;"></div>
+        {% endif %}
+    </div>
+    <button type="submit" class="btn btn-primary">保存配置</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">返回</a>
+</form>
+<script>
+function previewLogo(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = document.getElementById('logoPreview');
+            img.src = e.target.result;
+            img.style.display = 'inline';
+            img.style.maxHeight = '80px';
+        };
+        reader.readAsDataURL(file);
+    }
+}
+</script>
+{% endblock %}

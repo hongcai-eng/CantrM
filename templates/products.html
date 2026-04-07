@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>产品管理</h2>
+<button onclick="document.getElementById('addForm').style.display='block'" class="btn btn-primary">添加产品</button>
+
+<div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
+    <form method="GET" action="{{ url_for('products') }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>产品名称</label>
+                <input type="text" name="name" value="{{ request.args.get('name', '') }}">
+            </div>
+            <div class="form-group">
+                <label>产品类型</label>
+                <select name="category">
+                    <option value="">全部</option>
+                    <option value="硬件设备" {% if request.args.get('category') == '硬件设备' %}selected{% endif %}>硬件设备</option>
+                    <option value="软件" {% if request.args.get('category') == '软件' %}selected{% endif %}>软件</option>
+                    <option value="技术服务" {% if request.args.get('category') == '技术服务' %}selected{% endif %}>技术服务</option>
+                    <option value="技术开发" {% if request.args.get('category') == '技术开发' %}selected{% endif %}>技术开发</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>型号</label>
+            <input type="text" name="model" value="{{ request.args.get('model', '') }}">
+        </div>
+        <button type="submit" class="btn btn-primary">筛选</button>
+        <a href="{{ url_for('products') }}" class="btn btn-secondary">清除</a>
+    </form>
+</div>
+
+<div id="addForm" style="display:none; margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
+    <h3>添加产品</h3>
+    <form method="POST" action="{{ url_for('new_product') }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>产品名称</label>
+                <input type="text" name="name" required>
+            </div>
+            <div class="form-group">
+                <label>产品类型</label>
+                <select name="category" required>
+                    <option value="硬件设备">硬件设备</option>
+                    <option value="软件">软件</option>
+                    <option value="技术服务">技术服务</option>
+                    <option value="技术开发">技术开发</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>型号</label>
+                <input type="text" name="model">
+            </div>
+            <div class="form-group">
+                <label>单位</label>
+                <input type="text" name="unit">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>税率(%)</label>
+                <input type="number" step="0.01" name="tax_rate">
+            </div>
+            <div class="form-group">
+                <label>参考数量</label>
+                <input type="number" step="0.01" name="ref_quantity">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>参考单价</label>
+            <input type="number" step="0.01" name="ref_unit_price">
+        </div>
+        <button type="submit" class="btn btn-success">保存</button>
+        <button type="button" onclick="document.getElementById('addForm').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>产品名称</th>
+            <th>产品类型</th>
+            <th>型号</th>
+            <th>单位</th>
+            <th>税率</th>
+            <th>参考数量</th>
+            <th>参考单价</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+        <tr>
+            <td>{{ product.name }}</td>
+            <td>{{ product.category }}</td>
+            <td>{{ product.model }}</td>
+            <td>{{ product.unit }}</td>
+            <td>{{ product.tax_rate|notrailzero }}{% if product.tax_rate %}%{% endif %}</td>
+            <td>{{ product.ref_quantity }}</td>
+            <td>{{ product.ref_unit_price }}</td>
+            <td>
+                <button onclick="editProduct({{ product.id }}, '{{ product.name }}', '{{ product.category }}', '{{ product.model }}', '{{ product.unit }}', {{ product.tax_rate or 'null' }}, {{ product.ref_quantity or 'null' }}, {{ product.ref_unit_price or 'null' }})" class="btn btn-secondary">编辑</button>
+                <form method="POST" action="{{ url_for('delete_product', id=product.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除？')">删除</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="editForm" style="display:none; margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
+    <h3>编辑产品</h3>
+    <form method="POST" id="editFormAction">
+        <div class="form-row">
+            <div class="form-group">
+                <label>产品名称</label>
+                <input type="text" name="name" id="editName" required>
+            </div>
+            <div class="form-group">
+                <label>产品类型</label>
+                <select name="category" id="editCategory" required>
+                    <option value="硬件设备">硬件设备</option>
+                    <option value="软件">软件</option>
+                    <option value="技术服务">技术服务</option>
+                    <option value="技术开发">技术开发</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>型号</label>
+                <input type="text" name="model" id="editModel">
+            </div>
+            <div class="form-group">
+                <label>单位</label>
+                <input type="text" name="unit" id="editUnit">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>税率(%)</label>
+                <input type="number" step="0.01" name="tax_rate" id="editTaxRate">
+            </div>
+            <div class="form-group">
+                <label>参考数量</label>
+                <input type="number" step="0.01" name="ref_quantity" id="editRefQuantity">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>参考单价</label>
+            <input type="number" step="0.01" name="ref_unit_price" id="editRefUnitPrice">
+        </div>
+        <button type="submit" class="btn btn-success">保存</button>
+        <button type="button" onclick="document.getElementById('editForm').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+</div>
+
+<script>
+function editProduct(id, name, category, model, unit, taxRate, refQuantity, refUnitPrice) {
+    document.getElementById('editForm').style.display = 'block';
+    document.getElementById('editFormAction').action = '/product/' + id + '/edit';
+    document.getElementById('editName').value = name;
+    document.getElementById('editCategory').value = category;
+    document.getElementById('editModel').value = model || '';
+    document.getElementById('editUnit').value = unit || '';
+    document.getElementById('editTaxRate').value = taxRate || '';
+    document.getElementById('editRefQuantity').value = refQuantity || '';
+    document.getElementById('editRefUnitPrice').value = refUnitPrice || '';
+}
+</script>
+{% endblock %}
