@@ -98,7 +98,7 @@
             <td>{{ product.model }}</td>
             <td>{{ product.unit }}</td>
             <td>{{ product.tax_rate|notrailzero }}{% if product.tax_rate %}%{% endif %}</td>
-            <td>{{ product.ref_quantity }}</td>
+            <td>{{ product.ref_quantity|notrailzero }}</td>
             <td>{{ product.ref_unit_price }}</td>
             <td>
                 <button onclick="editProduct({{ product.id }}, '{{ product.name }}', '{{ product.category }}', '{{ product.model }}', '{{ product.unit }}', {{ product.tax_rate or 'null' }}, {{ product.ref_quantity or 'null' }}, {{ product.ref_unit_price or 'null' }})" class="btn btn-secondary">编辑</button>

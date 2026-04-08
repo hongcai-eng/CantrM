@@ -14,7 +14,7 @@
     <tr><th>合同签订日期</th><td>{{ contract.signing_date if contract.signing_date else '未填写' }}</td></tr>
     <tr><th>型号</th><td>{{ contract.model }}</td></tr>
     <tr><th>单位</th><td>{{ contract.unit }}</td></tr>
-    <tr><th>数量</th><td>{{ contract.quantity }}</td></tr>
+    <tr><th>数量</th><td>{{ contract.quantity|notrailzero }}</td></tr>
     <tr><th>单价</th><td>¥{{ "%.2f"|format(contract.unit_price) if contract.unit_price else '' }}</td></tr>
     <tr><th>合同总价</th><td>¥{{ "%.2f"|format(contract.total_price) }}</td></tr>
     <tr><th>已付款</th><td>¥{{ "%.2f"|format(contract.get_total_paid()) }}</td></tr>

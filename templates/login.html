@@ -34,17 +34,59 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        <form method="POST">
+        <form method="POST" id="loginForm">
+            <div class="form-group">
+                <label>切换账号</label>
+                <select id="accountSelect" onchange="fillAccount(this.value)" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+                    <option value="">-- 选择已记住的账号 --</option>
+                </select>
+            </div>
             <div class="form-group">
                 <label>用户名</label>
-                <input type="text" name="username" required>
+                <input type="text" name="username" id="usernameInput" required>
             </div>
             <div class="form-group">
                 <label>密码</label>
-                <input type="password" name="password" required>
+                <input type="password" name="password" id="passwordInput" required>
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="rememberAccount" style="width:auto;">
+                <label for="rememberAccount" style="margin:0;font-weight:normal;">记住此账号</label>
             </div>
             <button type="submit" class="btn">登录</button>
         </form>
+        <script>
+        // 从 localStorage 读取已记住的账号列表
+        function loadAccounts() {
+            var accounts = JSON.parse(localStorage.getItem('savedAccounts') || '[]');
+            var sel = document.getElementById('accountSelect');
+            sel.innerHTML = '<option value="">-- 选择已记住的账号 --</option>';
+            accounts.forEach(function(a) {
+                var opt = document.createElement('option');
+                opt.value = JSON.stringify(a);
+                opt.textContent = a.username;
+                sel.appendChild(opt);
+            });
+        }
+        function fillAccount(val) {
+            if (!val) return;
+            var a = JSON.parse(val);
+            document.getElementById('usernameInput').value = a.username;
+            document.getElementById('passwordInput').value = a.password;
+        }
+        document.getElementById('loginForm').addEventListener('submit', function() {
+            if (document.getElementById('rememberAccount').checked) {
+                var username = document.getElementById('usernameInput').value;
+                var password = document.getElementById('passwordInput').value;
+                var accounts = JSON.parse(localStorage.getItem('savedAccounts') || '[]');
+                var exists = accounts.findIndex(function(a){ return a.username === username; });
+                if (exists >= 0) { accounts[exists].password = password; }
+                else { accounts.push({username: username, password: password}); }
+                localStorage.setItem('savedAccounts', JSON.stringify(accounts));
+            }
+        });
+        loadAccounts();
+        </script>
     </div>
 </body>
 </html>

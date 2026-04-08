@@ -652,19 +652,26 @@ def export_statistics():
     if f_year:
         q = q.filter(func.strftime('%Y', Contract.signing_date) == f_year)
 
-    by_staff = q.with_entities(Contract.project_staff, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.project_staff).all()
-    by_customer = q.with_entities(Contract.customer_name, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.customer_name).all()
-    by_type = q.with_entities(Contract.contract_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.contract_type).all()
-    by_business = q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all()
-    by_status = q.with_entities(Contract.status, func.count(Contract.id)).group_by(Contract.status).all()
+    # 需求10：按勾选的sheets参数决定导出哪些sheet
+    sheets = request.args.get('sheets', 'staff,customer,type,business,status').split(',')
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-        pd.DataFrame(by_staff, columns=['项目负责人', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按项目负责人')
-        pd.DataFrame(by_customer, columns=['客户名称', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按客户')
-        pd.DataFrame(by_type, columns=['合同类型', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按合同类型')
-        pd.DataFrame(by_business, columns=['业务类型', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按业务类型')
-        pd.DataFrame(by_status, columns=['状态', '合同数量']).to_excel(writer, index=False, sheet_name='按履约状态')
+        if 'staff' in sheets:
+            by_staff = q.with_entities(Contract.project_staff, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.project_staff).all()
+            pd.DataFrame(by_staff, columns=['项目负责人', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按项目负责人')
+        if 'customer' in sheets:
+            by_customer = q.with_entities(Contract.customer_name, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.customer_name).all()
+            pd.DataFrame(by_customer, columns=['客户名称', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按客户')
+        if 'type' in sheets:
+            by_type = q.with_entities(Contract.contract_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.contract_type).all()
+            pd.DataFrame(by_type, columns=['合同类型', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按合同类型')
+        if 'business' in sheets:
+            by_business = q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all()
+            pd.DataFrame(by_business, columns=['业务类型', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按业务类型')
+        if 'status' in sheets:
+            by_status = q.with_entities(Contract.status, func.count(Contract.id)).group_by(Contract.status).all()
+            pd.DataFrame(by_status, columns=['状态', '合同数量']).to_excel(writer, index=False, sheet_name='按履约状态')
     buf.seek(0)
     filename = f"统计导出_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
     return send_file(buf, download_name=filename, as_attachment=True,
@@ -856,16 +863,49 @@ def import_contracts():
             flash('请选择文件', 'warning')
             return redirect(url_for('import_contracts'))
 
-        try:
-            df = pd.read_excel(file)
+        # 读取文件内容到内存，供重复导入检测使用
+        file_bytes = file.read()
 
-            # 新增：校验必填列是否存在
+        try:
+            df = pd.read_excel(io.BytesIO(file_bytes))
+
             required_cols = ['客户名称', '项目名称', '合同总价']
             missing_cols = [c for c in required_cols if c not in df.columns]
             if missing_cols:
                 flash(f'Excel 格式不正确，缺少必填列：{", ".join(missing_cols)}。'
                       f'请检查列名后重新上传。当前识别到的列：{", ".join(df.columns.tolist())}', 'warning')
                 return redirect(url_for('import_contracts'))
+
+            # ── 需求4：过滤全空行（客户名称和项目名称都为空的行视为无效行）──
+            df = df[~(df['客户名称'].isna() & df['项目名称'].isna())]
+
+            # ── 需求6：重复导入检测 ──
+            # 用"客户名称+项目名称+合同总价"组合判断是否已存在
+            confirmed = request.form.get('confirm_duplicate') == '1'
+            if not confirmed:
+                duplicates = []
+                for idx, row in df.iterrows():
+                    cname = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else ''
+                    pname = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else ''
+                    total_val = row.get('合同总价', 0)
+                    total_val = float(total_val) if pd.notna(total_val) else 0
+                    exists = Contract.query.filter_by(
+                        customer_name=cname, project_name=pname, total_price=total_val
+                    ).first()
+                    if exists:
+                        duplicates.append(f"第{idx+2}行：{cname} / {pname}")
+                if duplicates:
+                    # 将文件内容存入session临时缓存，让用户确认后继续
+                    import base64
+                    session['pending_import'] = base64.b64encode(file_bytes).decode()
+                    return render_template('import.html', duplicates=duplicates)
+
+            # 若用户确认重复，从session取回文件
+            if confirmed and 'pending_import' in session:
+                import base64
+                file_bytes = base64.b64decode(session.pop('pending_import'))
+                df = pd.read_excel(io.BytesIO(file_bytes))
+                df = df[~(df['客户名称'].isna() & df['项目名称'].isna())]
 
             count = 0
             errors = []
@@ -874,11 +914,26 @@ def import_contracts():
                     total_val = row.get('合同总价', 0)
                     if pd.isna(total_val):
                         total_val = 0
-                    # 兼容"项目负责人"和"项目人员"两种列名
                     staff_val = row.get('项目负责人') if '项目负责人' in df.columns else row.get('项目人员')
+
+                    # ── 需求3：同一合同多产品行支持 ──
+                    # 若客户名称/项目名称为空，则视为上一行合同的续行（追加产品信息到新合同记录）
+                    customer_name = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else None
+                    project_name = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else None
+
+                    # ── 需求2：确保业务类型和签订日期字段读取 ──
+                    business_type_val = str(row.get('业务类型', '销售')) if pd.notna(row.get('业务类型', None)) else '销售'
+                    signing_date_val = None
+                    raw_date = row.get('签订日期', None)
+                    if raw_date is not None and pd.notna(raw_date):
+                        try:
+                            signing_date_val = pd.to_datetime(raw_date).date()
+                        except Exception:
+                            signing_date_val = None
+
                     contract = Contract(
-                        customer_name=str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else '未知客户',
-                        project_name=str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else '未知项目',
+                        customer_name=customer_name or '未知客户',
+                        project_name=project_name or '未知项目',
                         product_name=str(row.get('产品名称', '')) if pd.notna(row.get('产品名称', None)) else None,
                         model=str(row.get('型号', '')) if pd.notna(row.get('型号', None)) else None,
                         unit=str(row.get('单位', '')) if pd.notna(row.get('单位', None)) else None,
@@ -890,9 +945,9 @@ def import_contracts():
                         sub_type=str(row.get('具体子类', '')) if pd.notna(row.get('具体子类', None)) else None,
                         project_staff=str(staff_val) if staff_val is not None and pd.notna(staff_val) else None,
                         sales_staff=str(row.get('销售人员', '')) if pd.notna(row.get('销售人员', None)) else None,
-                        business_type=str(row.get('业务类型', '销售')) if pd.notna(row.get('业务类型', None)) else '销售',
+                        business_type=business_type_val,
                         status=str(row.get('状态', '进行中')) if pd.notna(row.get('状态', None)) else '进行中',
-                        signing_date=pd.to_datetime(row.get('签订日期')).date() if pd.notna(row.get('签订日期', None)) else None,
+                        signing_date=signing_date_val,
                     )
                     db.session.add(contract)
                     count += 1

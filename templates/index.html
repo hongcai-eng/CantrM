@@ -3,7 +3,24 @@
 <div style="margin-bottom: 20px;">
     <a href="{{ url_for('new_contract') }}" class="btn btn-primary">新建合同</a>
     <a href="{{ url_for('import_contracts') }}" class="btn btn-success">导入Excel</a>
-    <a href="{{ url_for('export_contracts') }}?{{ request.query_string.decode() }}" class="btn btn-secondary">导出Excel</a>
+    <a href="javascript:void(0)" onclick="startExport()" class="btn btn-secondary">导出Excel</a>
+<div id="exportTip" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:30px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:9999;text-align:center;">
+    <div style="font-size:16px;margin-bottom:15px;">⏳ 正在生成Excel，请稍候...</div>
+    <div style="color:#888;font-size:13px;">文件生成后将自动弹出另存为对话框</div>
+</div>
+<script>
+function startExport() {
+    document.getElementById('exportTip').style.display = 'block';
+    var url = "{{ url_for('export_contracts') }}?" + window.location.search.substring(1);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ document.getElementById('exportTip').style.display = 'none'; }, 3000);
+}
+</script>
 </div>
 
 <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
