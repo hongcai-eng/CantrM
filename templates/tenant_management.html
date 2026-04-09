@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>租户客户管理</h2>
+<p style="color:#888;margin-bottom:20px;">管理独立的客户租户，每个租户拥有独立的数据空间和客户超级管理员账户</p>
+
+<button onclick="document.getElementById('newTenantForm').style.display='block'" class="btn btn-primary" style="margin-bottom:20px;">+ 新建租户客户</button>
+
+<!-- 新建租户表单 -->
+<div id="newTenantForm" style="display:none;background:#f8f9fa;padding:20px;border-radius:4px;margin-bottom:20px;">
+    <h3>新建租户客户</h3>
+    <form method="POST" action="{{ url_for('create_tenant') }}">
+        <div class="form-group">
+            <label>租户名称*</label>
+            <input type="text" name="tenant_name" required placeholder="如：XX公司">
+        </div>
+        <div class="form-group">
+            <label>描述</label>
+            <textarea name="description" placeholder="租户描述信息"></textarea>
+        </div>
+        <div class="form-group">
+            <label>客户超级管理员账号*</label>
+            <input type="text" name="admin_username" required placeholder="该租户的管理员账号">
+        </div>
+        <div class="form-group">
+            <label>初始密码*</label>
+            <input type="password" name="admin_password" required placeholder="至少6位">
+        </div>
+        <button type="submit" class="btn btn-success">创建</button>
+        <button type="button" onclick="document.getElementById('newTenantForm').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>租户名称</th>
+            <th>公司名称</th>
+            <th>Logo</th>
+            <th>描述</th>
+            <th>创建时间</th>
+            <th>用户数</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for tenant in tenants %}
+        <tr>
+            <td>{{ tenant.name }}</td>
+            <td>{{ tenant.company_name or '-' }}</td>
+            <td>
+                {% if tenant.logo_file %}
+                <img src="{{ url_for('static', filename=tenant.logo_file) }}" style="height:32px;width:auto;">
+                {% else %}
+                -
+                {% endif %}
+            </td>
+            <td>{{ tenant.description or '-' }}</td>
+            <td>{{ tenant.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>{{ tenant.users|length }}</td>
+            <td>
+                <a href="{{ url_for('users') }}?tenant_id={{ tenant.id }}" class="btn btn-secondary">查看用户</a>
+                <button onclick="showBrandingForm({{ tenant.id }}, '{{ tenant.name }}', '{{ tenant.company_name or '' }}', '{{ tenant.logo_file or '' }}')" class="btn btn-primary">设置品牌</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- 品牌设置弹窗 -->
+<div id="brandingModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;">
+    <div style="background:white;width:500px;margin:100px auto;padding:30px;border-radius:8px;">
+        <h3 id="brandingTitle">设置租户品牌</h3>
+        <form method="POST" id="brandingForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>公司名称</label>
+                <input type="text" name="company_name" id="brandingCompanyName" placeholder="显示在登录页的公司名称">
+            </div>
+            <div class="form-group">
+                <label>公司Logo</label>
+                <input type="file" name="logo_file" accept=".png,.jpg,.jpeg,.svg" onchange="previewLogo(this)">
+                <div id="logoPreview" style="margin-top:10px;"></div>
+            </div>
+            <button type="submit" class="btn btn-success">保存</button>
+            <button type="button" onclick="document.getElementById('brandingModal').style.display='none'" class="btn btn-secondary">取消</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function showBrandingForm(tenantId, tenantName, companyName, logoFile) {
+    document.getElementById('brandingTitle').textContent = '设置租户品牌 - ' + tenantName;
+    document.getElementById('brandingCompanyName').value = companyName;
+    document.getElementById('brandingForm').action = '/tenant/' + tenantId + '/branding';
+
+    var preview = document.getElementById('logoPreview');
+    if (logoFile) {
+        preview.innerHTML = '<p>当前Logo：</p><img src="/static/' + logoFile + '" style="height:48px;width:auto;">';
+    } else {
+        preview.innerHTML = '';
+    }
+
+    document.getElementById('brandingModal').style.display = 'block';
+}
+
+function previewLogo(input) {
+    var preview = document.getElementById('logoPreview');
+    if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            preview.innerHTML = '<p>新Logo预览：</p><img src="' + e.target.result + '" style="height:48px;width:auto;">';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
+{% endblock %}

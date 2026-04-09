@@ -4,9 +4,14 @@
     <a href="{{ url_for('new_contract') }}" class="btn btn-primary">新建合同</a>
     <a href="{{ url_for('import_contracts') }}" class="btn btn-success">导入Excel</a>
     <a href="javascript:void(0)" onclick="startExport()" class="btn btn-secondary">导出Excel</a>
+</div>
 <div id="exportTip" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:30px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:9999;text-align:center;">
     <div style="font-size:16px;margin-bottom:15px;">⏳ 正在生成Excel，请稍候...</div>
     <div style="color:#888;font-size:13px;">文件生成后将自动弹出另存为对话框</div>
+</div>
+<div id="exportComplete" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#d4edda;padding:30px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:9999;text-align:center;border-left:4px solid #28a745;">
+    <div style="font-size:16px;margin-bottom:10px;color:#155724;">✓ 下载完成</div>
+    <div style="color:#155724;font-size:13px;">Excel文件已生成，请查看浏览器下载目录</div>
 </div>
 <script>
 function startExport() {
@@ -18,10 +23,15 @@ function startExport() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(function(){ document.getElementById('exportTip').style.display = 'none'; }, 3000);
+    setTimeout(function(){
+        document.getElementById('exportTip').style.display = 'none';
+        document.getElementById('exportComplete').style.display = 'block';
+        setTimeout(function(){
+            document.getElementById('exportComplete').style.display = 'none';
+        }, 3000);
+    }, 2000);
 }
 </script>
-</div>
 
 <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
     <form method="GET" action="{{ url_for('index') }}">
@@ -153,16 +163,48 @@ document.addEventListener('click', function(e) {
 </div>
 {% endif %}
 
+<!-- 筛选结果统计汇总 -->
+<div style="background:#e7f3ff;padding:15px;border-radius:4px;margin-bottom:20px;border-left:4px solid #007bff;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:15px;">
+        <div>
+            <div style="color:#666;font-size:13px;">合同数量</div>
+            <div style="font-size:20px;font-weight:bold;color:#333;">{{ stats.count }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">合同总金额</div>
+            <div style="font-size:20px;font-weight:bold;color:#333;">¥{{ "%.2f"|format(stats.total_price) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">已收付款</div>
+            <div style="font-size:20px;font-weight:bold;color:#28a745;">¥{{ "%.2f"|format(stats.total_paid) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">未收付款</div>
+            <div style="font-size:20px;font-weight:bold;color:#dc3545;">¥{{ "%.2f"|format(stats.total_unpaid) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">已开票</div>
+            <div style="font-size:20px;font-weight:bold;color:#28a745;">¥{{ "%.2f"|format(stats.total_invoiced) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">未开票</div>
+            <div style="font-size:20px;font-weight:bold;color:#ffc107;">¥{{ "%.2f"|format(stats.total_uninvoiced) }}</div>
+        </div>
+    </div>
+</div>
+
 <table>
     <thead>
         <tr>
             <th>项目名称</th>
             <th>客户名称</th>
+            <th>项目负责人</th>
+            <th>签订日期</th>
             <th>合同总价</th>
             <th>未付款</th>
             <th>未开票</th>
             <th>合同类型</th>
-            <th>销售人员</th>
+            <th>业务类型</th>
             <th>状态</th>
             <th>操作</th>
         </tr>
@@ -172,11 +214,13 @@ document.addEventListener('click', function(e) {
         <tr>
             <td>{{ contract.project_name }}</td>
             <td>{{ contract.customer_name }}</td>
+            <td>{{ contract.project_staff or '-' }}</td>
+            <td>{{ contract.signing_date if contract.signing_date else '-' }}</td>
             <td>¥{{ "%.2f"|format(contract.total_price) }}</td>
             <td style="color:red;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td>
             <td style="color:orange;">¥{{ "%.2f"|format(contract.get_uninvoiced_amount()) }}</td>
             <td>{{ contract.contract_type }}</td>
-            <td>{{ contract.sales_staff }}</td>
+            <td>{{ contract.business_type }}</td>
             <td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td>
             <td>
                 <a href="{{ url_for('view_contract', id=contract.id) }}" class="btn btn-secondary">查看</a>

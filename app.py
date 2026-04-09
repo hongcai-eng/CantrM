@@ -1,17 +1,16 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session, jsonify
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
-from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import os
 import io
 import pandas as pd
+from models import db, User, TenantCustomer, Organization, Customer, Product, Contract, ContractProduct, Payment, Delivery, Invoice, SysConfig
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///contracts.db'
 app.config['UPLOAD_FOLDER'] = 'uploads'
-db = SQLAlchemy(app)
+db.init_app(app)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -24,133 +23,20 @@ def notrailzero_filter(val):
     return '{:g}'.format(float(val))
 
 
-# 用户模型
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(50), nullable=False)
-    permissions = db.Column(db.String(500))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-
-# 客户信息模型
-class Customer(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    province = db.Column(db.String(50))
-    region = db.Column(db.String(50))
-    credit_code = db.Column(db.String(100))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-# 产品信息模型
-class Product(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    category = db.Column(db.String(50), nullable=False)
-    model = db.Column(db.String(100))
-    unit = db.Column(db.String(50))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # 新增字段
-    tax_rate = db.Column(db.Float)        # 产品默认税率
-    ref_quantity = db.Column(db.Float)    # 参考数量
-    ref_unit_price = db.Column(db.Float)  # 参考单价
-
-
-class Contract(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    customer_name = db.Column(db.String(200), nullable=False)
-    project_name = db.Column(db.String(200), nullable=False)
-    product_name = db.Column(db.String(200))
-    model = db.Column(db.String(100))
-    unit = db.Column(db.String(50))
-    quantity = db.Column(db.Float)
-    unit_price = db.Column(db.Float)
-    total_price = db.Column(db.Float, nullable=False)
-    tax_rate = db.Column(db.Float)
-    contract_type = db.Column(db.String(50))
-    sub_type = db.Column(db.String(100))
-    project_staff = db.Column(db.String(200))
-    sales_staff = db.Column(db.String(100))
-    file_path = db.Column(db.String(500))
-    signing_date = db.Column(db.Date)
-    status = db.Column(db.String(20), default='进行中')
-    business_type = db.Column(db.String(20), default='销售')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    payments = db.relationship('Payment', backref='contract', lazy=True, cascade='all, delete-orphan')
-    deliveries = db.relationship('Delivery', backref='contract', lazy=True, cascade='all, delete-orphan')
-    invoices = db.relationship('Invoice', backref='contract', lazy=True, cascade='all, delete-orphan')
-
-    def get_total_paid(self):
-        return sum(p.amount for p in self.payments)
-
-    def get_unpaid_amount(self):
-        return self.total_price - self.get_total_paid()
-
-    def get_total_invoiced(self):
-        return sum(i.amount for i in self.invoices if i.invoice_status == '已开具')
-
-    def get_uninvoiced_amount(self):
-        return self.total_price - self.get_total_invoiced()
-
-
-class Payment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    contract_id = db.Column(db.Integer, db.ForeignKey('contract.id'), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    payment_date = db.Column(db.Date, nullable=False)
-    payment_type = db.Column(db.String(20))
-    note = db.Column(db.String(500))
-    receipt_file = db.Column(db.String(500))
-
-
-class Delivery(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    contract_id = db.Column(db.Integer, db.ForeignKey('contract.id'), nullable=False)
-    delivery_date = db.Column(db.Date, nullable=False)
-    content = db.Column(db.String(500))
-    note = db.Column(db.String(500))
-    delivery_file = db.Column(db.String(500))
-
-
-class Invoice(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    contract_id = db.Column(db.Integer, db.ForeignKey('contract.id'), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    received_date = db.Column(db.Date, nullable=False)
-    invoice_number = db.Column(db.String(100))
-    note = db.Column(db.String(500))
-    invoice_file = db.Column(db.String(500))
-    invoice_status = db.Column(db.String(20), default='未开具')
-    invoice_type = db.Column(db.String(20), default='普票')  # 新增：专票/普票
-
-
-# 系统配置模型
-class SysConfig(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(100), unique=True, nullable=False)
-    value = db.Column(db.String(500))
+# 模型已移至 models.py
 
 
 with app.app_context():
     db.create_all()
-    # 初始化超级管理员 admin
+    # 初始化超级管理员 admin（无租户，可管理所有数据）
     if not User.query.filter_by(username='admin').first():
-        admin = User(username='admin', role='超级管理员', permissions='all')
+        admin = User(username='admin', role='超级管理员', permissions='all', customer_id=None)
         admin.set_password('123456')
         db.session.add(admin)
         db.session.commit()
-    # 新增：初始化 superadmin（可管理 admin 用户）
+    # 新增：初始化 superadmin（总超级管理员，可创建客户超级管理员）
     if not User.query.filter_by(username='superadmin').first():
-        sa = User(username='superadmin', role='超级管理员', permissions='all')
+        sa = User(username='superadmin', role='超级管理员', permissions='all', customer_id=None)
         sa.set_password('654321')
         db.session.add(sa)
         db.session.commit()
@@ -162,12 +48,50 @@ def inject_company():
         configs = {c.key: c.value for c in SysConfig.query.all()}
     except Exception:
         configs = {}
-    return dict(company_name=configs.get('company_name', ''), company_logo_file=configs.get('company_logo_file', ''))
+
+    # 默认使用全局配置
+    company_name = configs.get('company_name', '')
+    company_logo_file = configs.get('company_logo_file', '')
+
+    # 若当前登录用户属于某租户，优先用租户自己的品牌信息
+    try:
+        user_id = session.get('user_id')
+        if user_id:
+            user = User.query.get(user_id)
+            if user and user.customer_id:
+                tenant = TenantCustomer.query.get(user.customer_id)
+                if tenant:
+                    if tenant.company_name:
+                        company_name = tenant.company_name
+                    if tenant.logo_file:
+                        company_logo_file = tenant.logo_file
+    except Exception:
+        pass
+
+    return dict(company_name=company_name, company_logo_file=company_logo_file)
 
 
 # ── 辅助：判断当前登录者是否为 superadmin ──
 def is_superadmin():
     return session.get('username') == 'superadmin'
+
+
+# ── 新增：获取当前用户的租户ID ──
+def get_current_customer_id():
+    """获取当前登录用户的租户客户ID，superadmin返回None"""
+    if 'user_id' not in session:
+        return None
+    user = User.query.get(session['user_id'])
+    return user.customer_id if user else None
+
+
+# ── 新增：判断是否为客户超级管理员 ──
+def is_customer_admin():
+    """判断当前用户是否为客户超级管理员（admin角色且有customer_id）"""
+    if 'user_id' not in session:
+        return False
+    user = User.query.get(session['user_id'])
+    return user and user.role == '超级管理员' and user.customer_id is not None
 
 
 # 登录验证装饰器
@@ -216,6 +140,45 @@ def login():
     return render_template('login.html')
 
 
+@app.route('/api/user_branding')
+def api_user_branding():
+    """根据用户名返回该用户所属租户的品牌信息（公司名称+Logo），登录页用"""
+    username = request.args.get('username', '').strip()
+    if not username:
+        return jsonify({'company_name': '', 'logo_url': ''})
+
+    user = User.query.filter_by(username=username).first()
+    if not user or not user.customer_id:
+        # superadmin 或未关联租户的用户：返回全局配置
+        configs = {c.key: c.value for c in SysConfig.query.all()}
+        logo_file = configs.get('company_logo_file', '')
+        logo_url = f'/static/{logo_file}' if logo_file else ''
+        return jsonify({
+            'company_name': configs.get('company_name', ''),
+            'logo_url': logo_url
+        })
+
+    tenant = TenantCustomer.query.get(user.customer_id)
+    if not tenant:
+        return jsonify({'company_name': '', 'logo_url': ''})
+
+    # 租户有自己的品牌信息则用自己的，否则回退到全局配置
+    if tenant.company_name or tenant.logo_file:
+        logo_url = f'/static/{tenant.logo_file}' if tenant.logo_file else ''
+        return jsonify({
+            'company_name': tenant.company_name or '',
+            'logo_url': logo_url
+        })
+    else:
+        configs = {c.key: c.value for c in SysConfig.query.all()}
+        logo_file = configs.get('company_logo_file', '')
+        logo_url = f'/static/{logo_file}' if logo_file else ''
+        return jsonify({
+            'company_name': configs.get('company_name', ''),
+            'logo_url': logo_url
+        })
+
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -229,13 +192,25 @@ def index():
     from sqlalchemy import func
     query = Contract.query
 
+    # 新增：数据隔离 - 非superadmin只能看到自己租户的数据
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        query = query.filter(Contract.customer_id == customer_id)
+
     # 原有筛选条件
     if request.args.get('project_staff'):
         query = query.filter(Contract.project_staff.like(f"%{request.args.get('project_staff')}%"))
     if request.args.get('customer_name'):
         query = query.filter(Contract.customer_name.like(f"%{request.args.get('customer_name')}%"))
+
+    # 修改：合同类型筛选 - 使用 JOIN 查询 ContractProduct 表
     if request.args.get('contract_type'):
-        query = query.filter(Contract.contract_type == request.args.get('contract_type'))
+        contract_type = request.args.get('contract_type')
+        # 使用 JOIN 确保只查询当前 query 范围内的合同
+        query = query.join(ContractProduct, Contract.id == ContractProduct.contract_id).filter(
+            ContractProduct.contract_type == contract_type
+        ).distinct()
+
     if request.args.get('status'):
         query = query.filter(Contract.status == request.args.get('status'))
     # 新增：业务类型筛选
@@ -280,7 +255,18 @@ def index():
     ).distinct().order_by(func.strftime('%Y', Contract.signing_date).desc()).all()
     available_years = [int(y[0]) for y in years_raw if y[0]]
 
-    return render_template('index.html', contracts=contracts, alerts=alerts, available_years=available_years)
+    # 筛选结果统计汇总
+    stats = {
+        'count': len(contracts),
+        'total_price': sum(c.total_price for c in contracts),
+        'total_paid': sum(c.get_total_paid() for c in contracts),
+        'total_unpaid': sum(c.get_unpaid_amount() for c in contracts),
+        'total_invoiced': sum(c.get_total_invoiced() for c in contracts),
+        'total_uninvoiced': sum(c.get_uninvoiced_amount() for c in contracts),
+    }
+
+    return render_template('index.html', contracts=contracts, alerts=alerts,
+                           available_years=available_years, stats=stats)
 
 
 # ── 新增：合同列表导出 Excel ──
@@ -290,12 +276,23 @@ def export_contracts():
     from sqlalchemy import func
     query = Contract.query
 
+    # 新增：租户数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        query = query.filter(Contract.customer_id == customer_id)
+
     if request.args.get('project_staff'):
         query = query.filter(Contract.project_staff.like(f"%{request.args.get('project_staff')}%"))
     if request.args.get('customer_name'):
         query = query.filter(Contract.customer_name.like(f"%{request.args.get('customer_name')}%"))
+
+    # 修改：合同类型筛选 - 使用 JOIN 查询 ContractProduct 表
     if request.args.get('contract_type'):
-        query = query.filter(Contract.contract_type == request.args.get('contract_type'))
+        contract_type = request.args.get('contract_type')
+        query = query.join(ContractProduct, Contract.id == ContractProduct.contract_id).filter(
+            ContractProduct.contract_type == contract_type
+        ).distinct()
+
     if request.args.get('status'):
         query = query.filter(Contract.status == request.args.get('status'))
     if request.args.get('business_type'):
@@ -346,8 +343,261 @@ def users():
     if session.get('role') != '超级管理员':
         flash('权限不足', 'warning')
         return redirect(url_for('index'))
-    users = User.query.all()
-    return render_template('users.html', users=users, is_superadmin=is_superadmin())
+
+    # 新增：客户超级管理员只能看到自己租户下的用户
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        users = User.query.filter(User.customer_id == customer_id).all()
+    else:
+        # superadmin可以看到所有用户
+        tenant_id = request.args.get('tenant_id')
+        if tenant_id:
+            users = User.query.filter(User.customer_id == int(tenant_id)).all()
+        else:
+            users = User.query.all()
+
+    # 新增：获取租户客户列表（仅superadmin可见）
+    tenants = TenantCustomer.query.all() if is_superadmin() else []
+
+    return render_template('users.html', users=users, is_superadmin=is_superadmin(),
+                         is_customer_admin=is_customer_admin(), tenants=tenants)
+
+
+# 新增：租户管理路由（仅superadmin可访问）
+@app.route('/tenants')
+@login_required
+def tenant_management():
+    if not is_superadmin():
+        flash('权限不足：只有总超级管理员可以管理租户', 'warning')
+        return redirect(url_for('index'))
+    tenants = TenantCustomer.query.order_by(TenantCustomer.created_at.desc()).all()
+    return render_template('tenant_management.html', tenants=tenants)
+
+
+# 新增：创建租户客户
+@app.route('/tenant/create', methods=['POST'])
+@login_required
+def create_tenant():
+    if not is_superadmin():
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    tenant_name = request.form['tenant_name']
+    description = request.form.get('description', '')
+    admin_username = request.form['admin_username']
+    admin_password = request.form['admin_password']
+
+    # 检查租户名称是否重复
+    if TenantCustomer.query.filter_by(name=tenant_name).first():
+        flash('租户名称已存在', 'warning')
+        return redirect(url_for('tenant_management'))
+
+    # 检查管理员账号是否重复
+    if User.query.filter_by(username=admin_username).first():
+        flash('管理员账号已存在', 'warning')
+        return redirect(url_for('tenant_management'))
+
+    # 创建租户
+    tenant = TenantCustomer(name=tenant_name, description=description)
+    db.session.add(tenant)
+    db.session.flush()
+
+    # 创建该租户的客户超级管理员
+    admin = User(
+        username=admin_username,
+        role='超级管理员',
+        permissions='all',
+        customer_id=tenant.id
+    )
+    admin.set_password(admin_password)
+    db.session.add(admin)
+    db.session.commit()
+
+    flash(f'租户"{tenant_name}"创建成功，管理员账号：{admin_username}', 'success')
+    return redirect(url_for('tenant_management'))
+
+
+# 新增：设置租户品牌信息（公司名称+Logo）
+@app.route('/tenant/<int:tenant_id>/branding', methods=['POST'])
+@login_required
+def tenant_branding(tenant_id):
+    if not is_superadmin():
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    tenant = TenantCustomer.query.get_or_404(tenant_id)
+    tenant.company_name = request.form.get('company_name', '').strip()
+
+    # 处理 Logo 文件上传
+    if 'logo_file' in request.files:
+        f = request.files['logo_file']
+        if f.filename:
+            ext = os.path.splitext(f.filename)[1]
+            logo_filename = f'tenant_{tenant_id}_logo{ext}'
+            f.save(os.path.join('static', logo_filename))
+            tenant.logo_file = logo_filename
+
+    db.session.commit()
+    flash(f'租户"{tenant.name}"的品牌信息已更新', 'success')
+    return redirect(url_for('tenant_management'))
+
+
+# ========== 组织结构管理 ==========
+
+@app.route('/organizations')
+@login_required
+def organizations():
+    """组织结构列表（客户超级管理员可访问）"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    if customer_id is None:
+        flash('superadmin 无需管理组织结构', 'warning')
+        return redirect(url_for('index'))
+
+    # 获取当前租户的所有组织（树形结构）
+    orgs = Organization.query.filter_by(customer_id=customer_id).order_by(Organization.created_at).all()
+
+    # 获取当前租户的所有用户
+    users = User.query.filter_by(customer_id=customer_id).all()
+
+    return render_template('organizations.html', organizations=orgs, users=users)
+
+
+@app.route('/organization/create', methods=['POST'])
+@login_required
+def create_organization():
+    """创建组织"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    if customer_id is None:
+        flash('superadmin 无需创建组织', 'warning')
+        return redirect(url_for('index'))
+
+    name = request.form['name']
+    description = request.form.get('description', '')
+    parent_id = request.form.get('parent_id')
+
+    if parent_id and parent_id.strip():
+        parent_id = int(parent_id)
+    else:
+        parent_id = None
+
+    org = Organization(
+        name=name,
+        description=description,
+        parent_id=parent_id,
+        customer_id=customer_id
+    )
+    db.session.add(org)
+    db.session.commit()
+
+    flash(f'组织"{name}"创建成功', 'success')
+    return redirect(url_for('organizations'))
+
+
+@app.route('/organization/<int:org_id>/edit', methods=['POST'])
+@login_required
+def edit_organization(org_id):
+    """编辑组织"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    org = Organization.query.get_or_404(org_id)
+
+    # 验证权限：只能编辑自己租户的组织
+    if org.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('organizations'))
+
+    org.name = request.form['name']
+    org.description = request.form.get('description', '')
+    parent_id = request.form.get('parent_id')
+
+    if parent_id and parent_id.strip():
+        org.parent_id = int(parent_id)
+    else:
+        org.parent_id = None
+
+    db.session.commit()
+    flash(f'组织"{org.name}"已更新', 'success')
+    return redirect(url_for('organizations'))
+
+
+@app.route('/organization/<int:org_id>/delete', methods=['POST'])
+@login_required
+def delete_organization(org_id):
+    """删除组织"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    org = Organization.query.get_or_404(org_id)
+
+    # 验证权限
+    if org.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('organizations'))
+
+    # 检查是否有子组织
+    if org.children:
+        flash('该组织下有子组织，无法删除', 'warning')
+        return redirect(url_for('organizations'))
+
+    # 检查是否有成员
+    if org.members:
+        flash('该组织下有成员，无法删除', 'warning')
+        return redirect(url_for('organizations'))
+
+    db.session.delete(org)
+    db.session.commit()
+    flash('组织已删除', 'success')
+    return redirect(url_for('organizations'))
+
+
+@app.route('/organization/transfer', methods=['POST'])
+@login_required
+def transfer_user():
+    """人员调动（调入/调出组织）"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    user_id = int(request.form['user_id'])
+    target_org_id = request.form.get('target_org_id')
+
+    user = User.query.get_or_404(user_id)
+
+    # 验证权限：只能调动自己租户的用户
+    if user.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('organizations'))
+
+    if target_org_id and target_org_id.strip():
+        target_org_id = int(target_org_id)
+        # 验证目标组织属于当前租户
+        target_org = Organization.query.get(target_org_id)
+        if not target_org or target_org.customer_id != customer_id:
+            flash('目标组织不存在或权限不足', 'warning')
+            return redirect(url_for('organizations'))
+        user.organization_id = target_org_id
+        flash(f'用户"{user.username}"已调入组织"{target_org.name}"', 'success')
+    else:
+        # 调出组织（设为 None）
+        user.organization_id = None
+        flash(f'用户"{user.username}"已调出组织', 'success')
+
+    db.session.commit()
+    return redirect(url_for('organizations'))
 
 
 @app.route('/user/new', methods=['GET', 'POST'])
@@ -362,17 +612,32 @@ def new_user():
         if role == '超级管理员' and not is_superadmin():
             flash('权限不足：只有 superadmin 可以创建超级管理员账户', 'warning')
             return redirect(url_for('users'))
+
+        # 新增：客户超级管理员创建的用户自动继承其customer_id
+        customer_id = get_current_customer_id()
+        if customer_id is not None and role == '超级管理员':
+            flash('客户超级管理员不能创建超级管理员账户', 'warning')
+            return redirect(url_for('users'))
+
+        # superadmin创建客户超级管理员时需要指定租户
+        if is_superadmin() and role == '超级管理员' and request.form.get('customer_id'):
+            customer_id = int(request.form['customer_id'])
+
         user = User(
             username=request.form['username'],
             role=role,
-            permissions=','.join(request.form.getlist('permissions'))
+            permissions=','.join(request.form.getlist('permissions')),
+            customer_id=customer_id
         )
         user.set_password(request.form['password'])
         db.session.add(user)
         db.session.commit()
         flash('用户创建成功', 'success')
         return redirect(url_for('users'))
-    return render_template('user_form.html', is_superadmin=is_superadmin())
+
+    tenants = TenantCustomer.query.all() if is_superadmin() else []
+    return render_template('user_form.html', is_superadmin=is_superadmin(),
+                         is_customer_admin=is_customer_admin(), tenants=tenants)
 
 
 @app.route('/user/<int:id>/edit', methods=['GET', 'POST'])
@@ -430,6 +695,12 @@ def delete_user(id):
 @login_required
 def customers():
     query = Customer.query
+
+    # 新增：数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        query = query.filter(Customer.customer_id == customer_id)
+
     if request.args.get('name'):
         query = query.filter(Customer.name.like(f"%{request.args.get('name')}%"))
     if request.args.get('province'):
@@ -446,7 +717,8 @@ def new_customer():
         name=request.form['name'],
         province=request.form.get('province'),
         region=request.form.get('region'),
-        credit_code=request.form.get('credit_code')
+        credit_code=request.form.get('credit_code'),
+        customer_id=get_current_customer_id()  # 新增：自动关联租户
     )
     db.session.add(customer)
     db.session.commit()
@@ -483,7 +755,14 @@ def delete_customer(id):
 @login_required
 def search_customers():
     query = request.args.get('q', '')
-    customers = Customer.query.filter(Customer.name.like(f'%{query}%')).limit(10).all()
+    q = Customer.query.filter(Customer.name.like(f'%{query}%'))
+
+    # 新增：数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        q = q.filter(Customer.customer_id == customer_id)
+
+    customers = q.limit(10).all()
     return jsonify([{'id': c.id, 'name': c.name, 'province': c.province} for c in customers])
 
 
@@ -494,7 +773,14 @@ def search_project_staff():
     query = request.args.get('q', '').strip()
     if not query:
         return jsonify([])
-    rows = db.session.query(Contract.project_staff).filter(
+
+    # 新增：租户数据隔离
+    q = db.session.query(Contract.project_staff)
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        q = q.filter(Contract.customer_id == customer_id)
+
+    rows = q.filter(
         Contract.project_staff.isnot(None),
         Contract.project_staff != '',
         Contract.project_staff.like(f'%{query}%')
@@ -513,6 +799,12 @@ def search_project_staff():
 @login_required
 def products():
     query = Product.query
+
+    # 新增：数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        query = query.filter(Product.customer_id == customer_id)
+
     if request.args.get('name'):
         query = query.filter(Product.name.like(f"%{request.args.get('name')}%"))
     if request.args.get('category'):
@@ -536,6 +828,7 @@ def new_product():
         tax_rate=float(request.form['tax_rate']) if request.form.get('tax_rate') else None,
         ref_quantity=float(request.form['ref_quantity']) if request.form.get('ref_quantity') else None,
         ref_unit_price=float(request.form['ref_unit_price']) if request.form.get('ref_unit_price') else None,
+        customer_id=get_current_customer_id()  # 新增：自动关联租户
     )
     db.session.add(product)
     db.session.commit()
@@ -576,7 +869,14 @@ def delete_product(id):
 @login_required
 def search_products():
     query = request.args.get('q', '')
-    products = Product.query.filter(Product.name.like(f'%{query}%')).limit(10).all()
+    q = Product.query.filter(Product.name.like(f'%{query}%'))
+
+    # 新增：数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        q = q.filter(Product.customer_id == customer_id)
+
+    products = q.limit(10).all()
     return jsonify([{
         'id': p.id, 'name': p.name, 'model': p.model, 'unit': p.unit,
         'tax_rate': p.tax_rate, 'ref_quantity': p.ref_quantity, 'ref_unit_price': p.ref_unit_price
@@ -588,6 +888,11 @@ def search_products():
 def statistics():
     from sqlalchemy import func
     q = Contract.query
+
+    # 新增：租户数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        q = q.filter(Contract.customer_id == customer_id)
     # 筛选
     f_staff = request.args.get('f_staff', '')
     f_customer = request.args.get('f_customer', '')
@@ -633,6 +938,11 @@ def statistics():
 def export_statistics():
     from sqlalchemy import func
     q = Contract.query
+
+    # 新增：租户数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        q = q.filter(Contract.customer_id == customer_id)
     f_staff = request.args.get('f_staff', '')
     f_customer = request.args.get('f_customer', '')
     f_type = request.args.get('f_type', '')
@@ -683,24 +993,22 @@ def export_statistics():
 @permission_required('增加')
 def new_contract():
     if request.method == 'POST':
+        # 新增：获取当前用户的租户ID
+        customer_id = get_current_customer_id()
+
+        # 创建合同主记录
         contract = Contract(
             customer_name=request.form['customer_name'],
             project_name=request.form['project_name'],
-            product_name=request.form.get('product_name'),
-            model=request.form.get('model'),
-            unit=request.form.get('unit'),
-            quantity=float(request.form['quantity']) if request.form.get('quantity') else None,
-            unit_price=float(request.form['unit_price']) if request.form.get('unit_price') else None,
             total_price=float(request.form['total_price']),
-            tax_rate=float(request.form['tax_rate']) if request.form.get('tax_rate') else None,
-            contract_type=request.form.get('contract_type'),
-            sub_type=request.form.get('sub_type'),
             project_staff=request.form.get('project_staff'),
             sales_staff=request.form.get('sales_staff'),
             business_type=request.form.get('business_type', '销售'),
-            signing_date=datetime.strptime(request.form['signing_date'], '%Y-%m-%d').date() if request.form.get('signing_date') else None
+            signing_date=datetime.strptime(request.form['signing_date'], '%Y-%m-%d').date() if request.form.get('signing_date') else None,
+            customer_id=customer_id  # 新增：关联租户
         )
 
+        # 处理合同文件上传
         if 'contract_file' in request.files:
             file = request.files['contract_file']
             if file.filename:
@@ -708,16 +1016,52 @@ def new_contract():
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 contract.file_path = filename
 
-        if not Customer.query.filter_by(name=contract.customer_name).first():
-            db.session.add(Customer(name=contract.customer_name))
+        # 自动同步客户信息
+        if not Customer.query.filter_by(name=contract.customer_name, customer_id=customer_id).first():
+            db.session.add(Customer(name=contract.customer_name, customer_id=customer_id))
 
         db.session.add(contract)
+        db.session.flush()  # 获取contract.id
+
+        # 新增：处理多产品数据
+        product_names = request.form.getlist('products[product_name][]')
+        contract_types = request.form.getlist('products[contract_type][]')
+        models = request.form.getlist('products[model][]')
+        units = request.form.getlist('products[unit][]')
+        quantities = request.form.getlist('products[quantity][]')
+        unit_prices = request.form.getlist('products[unit_price][]')
+        subtotals = request.form.getlist('products[subtotal][]')
+        tax_rates = request.form.getlist('products[tax_rate][]')
+
+        # 保存多个产品到 ContractProduct 表
+        for i in range(len(product_names)):
+            if product_names[i].strip():  # 只保存非空产品
+                cp = ContractProduct(
+                    contract_id=contract.id,
+                    product_name=product_names[i].strip() or None,
+                    contract_type=contract_types[i] if i < len(contract_types) else None,
+                    model=models[i].strip() if i < len(models) and models[i].strip() else None,
+                    unit=units[i].strip() if i < len(units) and units[i].strip() else None,
+                    quantity=float(quantities[i]) if i < len(quantities) and quantities[i] else None,
+                    unit_price=float(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else None,
+                    subtotal=float(subtotals[i]) if i < len(subtotals) and subtotals[i] else None,
+                    tax_rate=float(tax_rates[i]) if i < len(tax_rates) and tax_rates[i] else None
+                )
+                db.session.add(cp)
+
         db.session.commit()
         flash('合同创建成功', 'success')
         return redirect(url_for('index'))
 
-    customers_list = Customer.query.order_by(Customer.name).all()
-    products_list = Product.query.order_by(Product.name).all()
+    # GET请求：数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        customers_list = Customer.query.filter_by(customer_id=customer_id).order_by(Customer.name).all()
+        products_list = Product.query.filter_by(customer_id=customer_id).order_by(Product.name).all()
+    else:
+        customers_list = Customer.query.order_by(Customer.name).all()
+        products_list = Product.query.order_by(Product.name).all()
+
     return render_template('contract_form.html', customers_list=customers_list, products_list=products_list)
 
 
@@ -743,18 +1087,17 @@ def delete_contract(id):
 @permission_required('修改')
 def edit_contract(id):
     contract = Contract.query.get_or_404(id)
+
+    # 新增：数据隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足：无法访问其他租户的合同', 'warning')
+        return redirect(url_for('index'))
+
     if request.method == 'POST':
         contract.customer_name = request.form['customer_name']
         contract.project_name = request.form['project_name']
-        contract.product_name = request.form.get('product_name')
-        contract.model = request.form.get('model')
-        contract.unit = request.form.get('unit')
-        contract.quantity = float(request.form['quantity']) if request.form.get('quantity') else None
-        contract.unit_price = float(request.form['unit_price']) if request.form.get('unit_price') else None
         contract.total_price = float(request.form['total_price'])
-        contract.tax_rate = float(request.form['tax_rate']) if request.form.get('tax_rate') else None
-        contract.contract_type = request.form.get('contract_type')
-        contract.sub_type = request.form.get('sub_type')
         contract.project_staff = request.form.get('project_staff')
         contract.sales_staff = request.form.get('sales_staff')
         contract.status = request.form.get('status')
@@ -768,12 +1111,45 @@ def edit_contract(id):
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 contract.file_path = filename
 
+        # 新增：更新多产品数据 - 先删除旧的，再添加新的
+        ContractProduct.query.filter_by(contract_id=contract.id).delete()
+
+        product_names = request.form.getlist('products[product_name][]')
+        contract_types = request.form.getlist('products[contract_type][]')
+        models = request.form.getlist('products[model][]')
+        units = request.form.getlist('products[unit][]')
+        quantities = request.form.getlist('products[quantity][]')
+        unit_prices = request.form.getlist('products[unit_price][]')
+        subtotals = request.form.getlist('products[subtotal][]')
+        tax_rates = request.form.getlist('products[tax_rate][]')
+
+        for i in range(len(product_names)):
+            if product_names[i].strip():
+                cp = ContractProduct(
+                    contract_id=contract.id,
+                    product_name=product_names[i].strip() or None,
+                    contract_type=contract_types[i] if i < len(contract_types) else None,
+                    model=models[i].strip() if i < len(models) and models[i].strip() else None,
+                    unit=units[i].strip() if i < len(units) and units[i].strip() else None,
+                    quantity=float(quantities[i]) if i < len(quantities) and quantities[i] else None,
+                    unit_price=float(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else None,
+                    subtotal=float(subtotals[i]) if i < len(subtotals) and subtotals[i] else None,
+                    tax_rate=float(tax_rates[i]) if i < len(tax_rates) and tax_rates[i] else None
+                )
+                db.session.add(cp)
+
         db.session.commit()
         flash('合同更新成功', 'success')
         return redirect(url_for('view_contract', id=id))
 
-    customers_list = Customer.query.order_by(Customer.name).all()
-    products_list = Product.query.order_by(Product.name).all()
+    # GET请求：数据隔离
+    if customer_id is not None:
+        customers_list = Customer.query.filter_by(customer_id=customer_id).order_by(Customer.name).all()
+        products_list = Product.query.filter_by(customer_id=customer_id).order_by(Product.name).all()
+    else:
+        customers_list = Customer.query.order_by(Customer.name).all()
+        products_list = Product.query.order_by(Product.name).all()
+
     return render_template('contract_form.html', contract=contract, customers_list=customers_list, products_list=products_list)
 
 
@@ -863,7 +1239,9 @@ def import_contracts():
             flash('请选择文件', 'warning')
             return redirect(url_for('import_contracts'))
 
-        # 读取文件内容到内存，供重复导入检测使用
+        # 新增：获取当前用户的租户ID
+        customer_id = get_current_customer_id()
+
         file_bytes = file.read()
 
         try:
@@ -876,36 +1254,28 @@ def import_contracts():
                       f'请检查列名后重新上传。当前识别到的列：{", ".join(df.columns.tolist())}', 'warning')
                 return redirect(url_for('import_contracts'))
 
-            # ── 需求4：过滤全空行（客户名称和项目名称都为空的行视为无效行）──
+            # 过滤全空行
             df = df[~(df['客户名称'].isna() & df['项目名称'].isna())]
 
-            # ── 需求6：重复导入检测 ──
-            # 用"客户名称+项目名称+合同总价"组合判断是否已存在
-            confirmed = request.form.get('confirm_duplicate') == '1'
-            if not confirmed:
-                duplicates = []
-                for idx, row in df.iterrows():
-                    cname = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else ''
-                    pname = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else ''
-                    total_val = row.get('合同总价', 0)
-                    total_val = float(total_val) if pd.notna(total_val) else 0
-                    exists = Contract.query.filter_by(
-                        customer_name=cname, project_name=pname, total_price=total_val
-                    ).first()
-                    if exists:
-                        duplicates.append(f"第{idx+2}行：{cname} / {pname}")
-                if duplicates:
-                    # 将文件内容存入session临时缓存，让用户确认后继续
-                    import base64
-                    session['pending_import'] = base64.b64encode(file_bytes).decode()
-                    return render_template('import.html', duplicates=duplicates)
+            # 新增：重复导入检测（只提示，不允许确认导入）
+            duplicates = []
+            for idx, row in df.iterrows():
+                cname = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else ''
+                pname = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else ''
+                total_val = row.get('合同总价', 0)
+                total_val = float(total_val) if pd.notna(total_val) else 0
 
-            # 若用户确认重复，从session取回文件
-            if confirmed and 'pending_import' in session:
-                import base64
-                file_bytes = base64.b64decode(session.pop('pending_import'))
-                df = pd.read_excel(io.BytesIO(file_bytes))
-                df = df[~(df['客户名称'].isna() & df['项目名称'].isna())]
+                # 新增：数据隔离检查
+                q = Contract.query.filter_by(customer_name=cname, project_name=pname, total_price=total_val)
+                if customer_id is not None:
+                    q = q.filter_by(customer_id=customer_id)
+                exists = q.first()
+
+                if exists:
+                    duplicates.append(f"第{idx+2}行：{cname} / {pname} / ¥{total_val}")
+
+            if duplicates:
+                return render_template('import.html', duplicates=duplicates)
 
             count = 0
             errors = []
@@ -916,12 +1286,9 @@ def import_contracts():
                         total_val = 0
                     staff_val = row.get('项目负责人') if '项目负责人' in df.columns else row.get('项目人员')
 
-                    # ── 需求3：同一合同多产品行支持 ──
-                    # 若客户名称/项目名称为空，则视为上一行合同的续行（追加产品信息到新合同记录）
                     customer_name = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else None
                     project_name = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else None
 
-                    # ── 需求2：确保业务类型和签订日期字段读取 ──
                     business_type_val = str(row.get('业务类型', '销售')) if pd.notna(row.get('业务类型', None)) else '销售'
                     signing_date_val = None
                     raw_date = row.get('签订日期', None)
@@ -931,28 +1298,43 @@ def import_contracts():
                         except Exception:
                             signing_date_val = None
 
+                    # 创建合同主记录
                     contract = Contract(
                         customer_name=customer_name or '未知客户',
                         project_name=project_name or '未知项目',
-                        product_name=str(row.get('产品名称', '')) if pd.notna(row.get('产品名称', None)) else None,
-                        model=str(row.get('型号', '')) if pd.notna(row.get('型号', None)) else None,
-                        unit=str(row.get('单位', '')) if pd.notna(row.get('单位', None)) else None,
-                        quantity=float(row.get('数量', 0)) if pd.notna(row.get('数量', None)) else None,
-                        unit_price=float(row.get('单价', 0)) if pd.notna(row.get('单价', None)) else None,
                         total_price=float(total_val),
-                        tax_rate=float(row.get('发票税率', 0)) if pd.notna(row.get('发票税率', None)) else None,
-                        contract_type=str(row.get('合同类型', '')) if pd.notna(row.get('合同类型', None)) else None,
-                        sub_type=str(row.get('具体子类', '')) if pd.notna(row.get('具体子类', None)) else None,
                         project_staff=str(staff_val) if staff_val is not None and pd.notna(staff_val) else None,
                         sales_staff=str(row.get('销售人员', '')) if pd.notna(row.get('销售人员', None)) else None,
                         business_type=business_type_val,
                         status=str(row.get('状态', '进行中')) if pd.notna(row.get('状态', None)) else '进行中',
                         signing_date=signing_date_val,
+                        customer_id=customer_id  # 新增：关联租户
                     )
                     db.session.add(contract)
+                    db.session.flush()  # 获取contract.id
+
+                    # 新增：创建产品记录（支持工程/货物/服务组合）
+                    product_name = str(row.get('产品名称', '')) if pd.notna(row.get('产品名称', None)) else None
+                    if product_name:
+                        cp = ContractProduct(
+                            contract_id=contract.id,
+                            product_name=product_name,
+                            contract_type=str(row.get('合同类型', '')) if pd.notna(row.get('合同类型', None)) else None,
+                            model=str(row.get('型号', '')) if pd.notna(row.get('型号', None)) else None,
+                            unit=str(row.get('单位', '')) if pd.notna(row.get('单位', None)) else None,
+                            quantity=float(row.get('数量', 0)) if pd.notna(row.get('数量', None)) else None,
+                            unit_price=float(row.get('单价', 0)) if pd.notna(row.get('单价', None)) else None,
+                            tax_rate=float(row.get('发票税率', 0)) if pd.notna(row.get('发票税率', None)) else None
+                        )
+                        # 计算小计
+                        if cp.quantity and cp.unit_price:
+                            cp.subtotal = cp.quantity * cp.unit_price
+                        db.session.add(cp)
+
                     count += 1
                 except Exception as row_err:
                     errors.append(f"第{idx+2}行: {str(row_err)}")
+
             db.session.commit()
             msg = f'成功导入 {count} 条合同记录'
             if errors:

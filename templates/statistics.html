@@ -20,6 +20,13 @@
     <button onclick="doExport()" class="btn btn-success">确认导出</button>
     <button onclick="document.getElementById('exportDialog').style.display='none'" class="btn btn-secondary">取消</button>
 </div>
+
+<!-- 新增：下载完成提示 -->
+<div id="exportComplete" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#d4edda;padding:30px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:10000;text-align:center;border-left:4px solid #28a745;">
+    <div style="font-size:16px;margin-bottom:10px;color:#155724;">✓ 下载完成</div>
+    <div style="color:#155724;font-size:13px;">Excel文件已生成，请查看浏览器下载目录</div>
+</div>
+
 <script>
 function showExportDialog() {
     document.getElementById('exportDialog').style.display = 'block';
@@ -34,12 +41,24 @@ function doExport() {
     if (document.getElementById('exp_status').checked) sheets.push('status');
     if (sheets.length === 0) { alert('请至少选择一项'); return; }
     document.getElementById('exportingTip').style.display = 'block';
-    var qs = '{{ request.query_string.decode() }}';
-    var url = "{{ url_for('export_statistics') }}?" + qs + '&sheets=' + sheets.join(',');
+
+    // 改进：正确拼接 URL，避免重复参数
+    var url = "{{ url_for('export_statistics') }}";
+    var params = new URLSearchParams(window.location.search);
+    params.delete('sheets'); // 删除旧的 sheets 参数
+    params.set('sheets', sheets.join(',')); // 设置新的 sheets 参数
+    url += '?' + params.toString();
+
     var a = document.createElement('a');
     a.href = url; a.download = '';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(function(){ document.getElementById('exportDialog').style.display='none'; }, 2500);
+    setTimeout(function(){
+        document.getElementById('exportDialog').style.display='none';
+        document.getElementById('exportComplete').style.display='block';
+        setTimeout(function(){
+            document.getElementById('exportComplete').style.display='none';
+        }, 3000);
+    }, 2000);
 }
 </script>
 

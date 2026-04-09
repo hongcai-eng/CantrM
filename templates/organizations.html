@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>组织结构管理</h2>
+<p style="color:#888;margin-bottom:20px;">管理本租户的组织架构，支持层级结构和人员调动</p>
+
+<button onclick="showCreateForm()" class="btn btn-primary" style="margin-bottom:20px;">+ 新建组织</button>
+
+<!-- 新建组织表单 -->
+<div id="createOrgForm" style="display:none;background:#f8f9fa;padding:20px;border-radius:4px;margin-bottom:20px;">
+    <h3>新建组织</h3>
+    <form method="POST" action="{{ url_for('create_organization') }}">
+        <div class="form-group">
+            <label>组织名称*</label>
+            <input type="text" name="name" required placeholder="如：技术部">
+        </div>
+        <div class="form-group">
+            <label>描述</label>
+            <textarea name="description" placeholder="组织描述信息"></textarea>
+        </div>
+        <div class="form-group">
+            <label>上级组织</label>
+            <select name="parent_id">
+                <option value="">无（顶级组织）</option>
+                {% for org in organizations %}
+                <option value="{{ org.id }}">{{ org.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-success">创建</button>
+        <button type="button" onclick="document.getElementById('createOrgForm').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+</div>
+
+<!-- 组织列表 -->
+<h3>组织列表</h3>
+<table>
+    <thead>
+        <tr>
+            <th>组织名称</th>
+            <th>描述</th>
+            <th>上级组织</th>
+            <th>成员数</th>
+            <th>创建时间</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for org in organizations %}
+        <tr>
+            <td style="{% if org.parent_id %}padding-left:30px;{% endif %}">
+                {% if org.parent_id %}└─ {% endif %}{{ org.name }}
+            </td>
+            <td>{{ org.description or '-' }}</td>
+            <td>{{ org.parent.name if org.parent else '-' }}</td>
+            <td>{{ org.members|length }}</td>
+            <td>{{ org.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>
+                <button onclick="showEditForm({{ org.id }}, '{{ org.name }}', '{{ org.description or '' }}', {{ org.parent_id or 'null' }})" class="btn btn-primary">编辑</button>
+                <form method="POST" action="{{ url_for('delete_organization', org_id=org.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该组织？')">删除</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- 编辑组织弹窗 -->
+<div id="editOrgModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;">
+    <div style="background:white;width:500px;margin:100px auto;padding:30px;border-radius:8px;">
+        <h3>编辑组织</h3>
+        <form method="POST" id="editOrgForm">
+            <div class="form-group">
+                <label>组织名称*</label>
+                <input type="text" name="name" id="editOrgName" required>
+            </div>
+            <div class="form-group">
+                <label>描述</label>
+                <textarea name="description" id="editOrgDesc"></textarea>
+            </div>
+            <div class="form-group">
+                <label>上级组织</label>
+                <select name="parent_id" id="editOrgParent">
+                    <option value="">无（顶级组织）</option>
+                    {% for org in organizations %}
+                    <option value="{{ org.id }}">{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-success">保存</button>
+            <button type="button" onclick="document.getElementById('editOrgModal').style.display='none'" class="btn btn-secondary">取消</button>
+        </form>
+    </div>
+</div>
+
+<!-- 人员调动 -->
+<h3 style="margin-top:40px;">人员调动</h3>
+<div style="background:#f8f9fa;padding:20px;border-radius:4px;">
+    <form method="POST" action="{{ url_for('transfer_user') }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>选择用户*</label>
+                <select name="user_id" required>
+                    <option value="">-- 选择用户 --</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.username }} ({{ user.role }}) - 当前组织：{{ user.organization.name if user.organization else '未分配' }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>目标组织</label>
+                <select name="target_org_id">
+                    <option value="">调出组织（不属于任何组织）</option>
+                    {% for org in organizations %}
+                    <option value="{{ org.id }}">{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success">执行调动</button>
+    </form>
+</div>
+
+<!-- 组织成员明细 -->
+<h3 style="margin-top:40px;">组织成员明细</h3>
+<table>
+    <thead>
+        <tr>
+            <th>组织名称</th>
+            <th>成员列表</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for org in organizations %}
+        <tr>
+            <td>{{ org.name }}</td>
+            <td>
+                {% if org.members %}
+                    {% for member in org.members %}
+                    <span style="display:inline-block;background:#e7f3ff;padding:4px 8px;margin:2px;border-radius:3px;">{{ member.username }} ({{ member.role }})</span>
+                    {% endfor %}
+                {% else %}
+                    <span style="color:#999;">暂无成员</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+function showCreateForm() {
+    document.getElementById('createOrgForm').style.display = 'block';
+}
+
+function showEditForm(orgId, name, desc, parentId) {
+    document.getElementById('editOrgName').value = name;
+    document.getElementById('editOrgDesc').value = desc;
+    document.getElementById('editOrgParent').value = parentId || '';
+    document.getElementById('editOrgForm').action = '/organization/' + orgId + '/edit';
+    document.getElementById('editOrgModal').style.display = 'block';
+}
+</script>
+{% endblock %}

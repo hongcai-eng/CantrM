@@ -12,17 +12,10 @@
     <tr><th>客户名称</th><td>{{ contract.customer_name }}</td></tr>
     <tr><th>项目名称</th><td>{{ contract.project_name }}</td></tr>
     <tr><th>合同签订日期</th><td>{{ contract.signing_date if contract.signing_date else '未填写' }}</td></tr>
-    <tr><th>型号</th><td>{{ contract.model }}</td></tr>
-    <tr><th>单位</th><td>{{ contract.unit }}</td></tr>
-    <tr><th>数量</th><td>{{ contract.quantity|notrailzero }}</td></tr>
-    <tr><th>单价</th><td>¥{{ "%.2f"|format(contract.unit_price) if contract.unit_price else '' }}</td></tr>
     <tr><th>合同总价</th><td>¥{{ "%.2f"|format(contract.total_price) }}</td></tr>
     <tr><th>已付款</th><td>¥{{ "%.2f"|format(contract.get_total_paid()) }}</td></tr>
     <tr><th>未付款</th><td style="color:red; font-weight:bold;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td></tr>
-    <tr><th>发票税率</th><td>{{ contract.tax_rate|notrailzero }}{% if contract.tax_rate %}%{% endif %}</td></tr>
-    <tr><th>合同类型</th><td>{{ contract.contract_type }}</td></tr>
     <tr><th>业务类型</th><td>{{ contract.business_type }}</td></tr>
-    <tr><th>具体子类</th><td>{{ contract.sub_type }}</td></tr>
     <tr><th>项目负责人</th><td>{{ contract.project_staff }}</td></tr>
     <tr><th>销售人员</th><td>{{ contract.sales_staff }}</td></tr>
     <tr><th>状态</th><td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td></tr>
@@ -40,6 +33,40 @@
         {% endif %}
     </td></tr>
 </table>
+
+<h3>产品明细</h3>
+{% if contract.products %}
+<table>
+    <thead>
+        <tr>
+            <th>产品名称</th>
+            <th>合同类型</th>
+            <th>型号</th>
+            <th>单位</th>
+            <th>数量</th>
+            <th>单价</th>
+            <th>税率</th>
+            <th>小计</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in contract.products %}
+        <tr>
+            <td>{{ product.product_name }}</td>
+            <td>{{ product.contract_type }}</td>
+            <td>{{ product.model }}</td>
+            <td>{{ product.unit }}</td>
+            <td>{{ product.quantity|notrailzero }}</td>
+            <td>¥{{ "%.2f"|format(product.unit_price) if product.unit_price else '' }}</td>
+            <td>{{ product.tax_rate|notrailzero }}{% if product.tax_rate %}%{% endif %}</td>
+            <td>¥{{ "%.2f"|format(product.subtotal) if product.subtotal else '' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p style="color: #666; font-style: italic;">暂无产品明细（旧版合同数据）</p>
+{% endif %}
 
 <h3>收付款记录</h3>
 <form method="POST" action="{{ url_for('add_payment', id=contract.id) }}" enctype="multipart/form-data" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">

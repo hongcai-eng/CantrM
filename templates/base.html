@@ -43,6 +43,11 @@
         <a href="{{ url_for('statistics') }}">统计分析</a>
         {% if session.role == '超级管理员' %}
         <a href="{{ url_for('users') }}">用户管理</a>
+        {% if session.username == 'superadmin' %}
+        <a href="{{ url_for('tenant_management') }}">租户管理</a>
+        {% else %}
+        <a href="{{ url_for('organizations') }}">组织管理</a>
+        {% endif %}
         <a href="{{ url_for('sysconfig') }}">系统配置</a>
         {% endif %}
         <span class="right">

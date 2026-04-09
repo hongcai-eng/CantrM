@@ -9,27 +9,24 @@
         <li>项目名称*（必填）</li>
         <li>合同总价*（必填）</li>
         <li>产品名称、型号、单位、数量、单价、发票税率</li>
-        <li>合同类型、<strong>业务类型（销售/采购）</strong>、具体子类</li>
+        <li>合同类型（工程/货物/服务）、<strong>业务类型（销售/采购）</strong></li>
         <li>项目负责人、销售人员</li>
         <li><strong>签订日期</strong>（格式：2024-01-01 或 2024/01/01）</li>
         <li>状态（默认：进行中）</li>
     </ul>
-    <p style="color:#888;font-size:13px;">提示：同一合同有多个产品时，每个产品占一行，客户名称/项目名称/合同总价可重复填写，系统会分别导入为独立记录。</p>
+    <p style="color:#888;font-size:13px;">提示：同一合同有多个产品时，每个产品占一行，客户名称/项目名称/合同总价可重复填写，系统会为每行创建独立的合同记录（支持工程、货物、服务组合）。</p>
 </div>
 
 {% if duplicates %}
 <div style="background:#fff3cd;border-left:4px solid #ffc107;padding:15px;border-radius:4px;margin-bottom:20px;">
-    <strong>⚠️ 检测到以下合同可能已存在，是否仍要继续导入？</strong>
+    <strong>⚠️ 检测到以下合同可能已存在：</strong>
     <ul style="margin:10px 0 0 0;">
         {% for d in duplicates %}
         <li>{{ d }}</li>
         {% endfor %}
     </ul>
-    <form method="POST" enctype="multipart/form-data" style="margin-top:12px;">
-        <input type="hidden" name="confirm_duplicate" value="1">
-        <button type="submit" class="btn btn-warning">确认重复导入</button>
-        <a href="{{ url_for('import_contracts') }}" class="btn btn-secondary">取消</a>
-    </form>
+    <p style="margin-top:12px;color:#856404;">请检查数据后重新上传，或联系管理员处理重复数据。</p>
+    <a href="{{ url_for('import_contracts') }}" class="btn btn-secondary">返回</a>
 </div>
 {% else %}
 <form method="POST" enctype="multipart/form-data">

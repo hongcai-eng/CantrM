@@ -14,55 +14,126 @@
             <input type="text" name="project_name" value="{{ contract.project_name if contract else '' }}" required>
         </div>
     </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label>产品名称</label>
-            <input type="text" name="product_name" id="productNameInput" value="{{ contract.product_name if contract else '' }}" autocomplete="off" placeholder="输入或从产品库选择">
-            <div id="productSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto;"></div>
-            <small style="color:#888;">可从<a href="{{ url_for('products') }}" target="_blank">产品管理</a>中选择，选中后自动填入型号/单位</small>
-        </div>
-        <div class="form-group"></div>
+
+    <!-- 新增：多产品动态表单区域 -->
+    <h3 style="margin-top:20px;">产品信息</h3>
+    <div id="productsContainer">
+        {% if contract and contract.products %}
+            {% for cp in contract.products %}
+            <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="products[product_name][]" class="product-name-input" value="{{ cp.product_name }}" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>合同类型</label>
+                        <select name="products[contract_type][]">
+                            <option value="">请选择</option>
+                            <option value="工程" {% if cp.contract_type == '工程' %}selected{% endif %}>工程</option>
+                            <option value="货物" {% if cp.contract_type == '货物' %}selected{% endif %}>货物</option>
+                            <option value="服务" {% if cp.contract_type == '服务' %}selected{% endif %}>服务</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>型号</label>
+                        <input type="text" name="products[model][]" class="model-input" value="{{ cp.model or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>单位</label>
+                        <input type="text" name="products[unit][]" class="unit-input" value="{{ cp.unit or '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.01" name="products[quantity][]" class="quantity-input" value="{{ cp.quantity or '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                    <div class="form-group">
+                        <label>单价</label>
+                        <input type="number" step="0.01" name="products[unit_price][]" class="unit-price-input" value="{{ cp.unit_price or '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>小计</label>
+                        <input type="number" step="0.01" name="products[subtotal][]" class="subtotal-input" value="{{ cp.subtotal or '' }}" readonly style="background:#f0f0f0;">
+                    </div>
+                    <div class="form-group">
+                        <label>税率(%)</label>
+                        <input type="number" step="0.01" name="products[tax_rate][]" value="{{ cp.tax_rate or '' }}">
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="products[product_name][]" class="product-name-input" value="{{ contract.product_name if contract else '' }}" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>合同类型</label>
+                        <select name="products[contract_type][]">
+                            <option value="">请选择</option>
+                            <option value="工程" {% if contract and contract.contract_type == '工程' %}selected{% endif %}>工程</option>
+                            <option value="货物" {% if contract and contract.contract_type == '货物' %}selected{% endif %}>货物</option>
+                            <option value="服务" {% if contract and contract.contract_type == '服务' %}selected{% endif %}>服务</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>型号</label>
+                        <input type="text" name="products[model][]" class="model-input" value="{{ contract.model if contract else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>单位</label>
+                        <input type="text" name="products[unit][]" class="unit-input" value="{{ contract.unit if contract else '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.01" name="products[quantity][]" class="quantity-input" value="{{ contract.quantity if contract else '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                    <div class="form-group">
+                        <label>单价</label>
+                        <input type="number" step="0.01" name="products[unit_price][]" class="unit-price-input" value="{{ contract.unit_price if contract else '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>小计</label>
+                        <input type="number" step="0.01" name="products[subtotal][]" class="subtotal-input" value="" readonly style="background:#f0f0f0;">
+                    </div>
+                    <div class="form-group">
+                        <label>税率(%)</label>
+                        <input type="number" step="0.01" name="products[tax_rate][]" value="{{ contract.tax_rate if contract else '' }}">
+                    </div>
+                </div>
+            </div>
+        {% endif %}
     </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label>型号</label>
-            <input type="text" name="model" id="modelInput" value="{{ contract.model if contract else '' }}">
-        </div>
-        <div class="form-group">
-            <label>单位</label>
-            <input type="text" name="unit" id="unitInput" value="{{ contract.unit if contract else '' }}">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label>数量</label>
-            <input type="number" step="0.01" name="quantity" value="{{ contract.quantity if contract else '' }}">
-        </div>
-        <div class="form-group">
-            <label>单价</label>
-            <input type="number" step="0.01" name="unit_price" value="{{ contract.unit_price if contract else '' }}">
-        </div>
-    </div>
+    <button type="button" onclick="addProduct()" class="btn btn-secondary" style="margin-bottom:20px;">+ 添加产品</button>
+
     <div class="form-row">
         <div class="form-group">
             <label>合同总价*</label>
-            <input type="number" step="0.01" name="total_price" value="{{ contract.total_price if contract else '' }}" required>
+            <input type="number" step="0.01" name="total_price" id="totalPrice" value="{{ contract.total_price if contract else '' }}" required>
+            <small style="color:#888;">可手动输入或点击"自动计算"按钮</small>
         </div>
         <div class="form-group">
-            <label>发票税率(%)</label>
-            <input type="number" step="0.01" name="tax_rate" value="{{ contract.tax_rate if contract else '' }}">
+            <button type="button" onclick="autoCalcTotal()" class="btn btn-secondary" style="margin-top:28px;">自动计算总价</button>
         </div>
     </div>
+
     <div class="form-row">
-        <div class="form-group">
-            <label>合同类型</label>
-            <select name="contract_type">
-                <option value="">请选择</option>
-                <option value="工程" {% if contract and contract.contract_type == '工程' %}selected{% endif %}>工程</option>
-                <option value="货物" {% if contract and contract.contract_type == '货物' %}selected{% endif %}>货物</option>
-                <option value="服务" {% if contract and contract.contract_type == '服务' %}selected{% endif %}>服务</option>
-            </select>
-        </div>
         <div class="form-group">
             <label>业务类型</label>
             <select name="business_type">
@@ -70,14 +141,9 @@
                 <option value="采购" {% if contract and contract.business_type == '采购' %}selected{% endif %}>采购</option>
             </select>
         </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label>具体子类</label>
-            <input type="text" name="sub_type" value="{{ contract.sub_type if contract else '' }}" placeholder="如：硬件销售、软件采购">
-        </div>
         <div class="form-group"></div>
     </div>
+
     <div class="form-row">
         <div class="form-group">
             <label>项目负责人</label>
@@ -118,6 +184,89 @@
         {% endif %}
     </div>
     <script>
+    // 添加产品
+    function addProduct() {
+        const container = document.getElementById('productsContainer');
+        const template = `
+            <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="products[product_name][]" class="product-name-input" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>合同类型</label>
+                        <select name="products[contract_type][]">
+                            <option value="">请选择</option>
+                            <option value="工程">工程</option>
+                            <option value="货物">货物</option>
+                            <option value="服务">服务</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>型号</label>
+                        <input type="text" name="products[model][]" class="model-input">
+                    </div>
+                    <div class="form-group">
+                        <label>单位</label>
+                        <input type="text" name="products[unit][]" class="unit-input">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.01" name="products[quantity][]" class="quantity-input" onchange="calcSubtotal(this)">
+                    </div>
+                    <div class="form-group">
+                        <label>单价</label>
+                        <input type="number" step="0.01" name="products[unit_price][]" class="unit-price-input" onchange="calcSubtotal(this)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>小计</label>
+                        <input type="number" step="0.01" name="products[subtotal][]" class="subtotal-input" readonly style="background:#f0f0f0;">
+                    </div>
+                    <div class="form-group">
+                        <label>税率(%)</label>
+                        <input type="number" step="0.01" name="products[tax_rate][]">
+                    </div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', template);
+    }
+
+    // 删除产品
+    function removeProduct(btn) {
+        const items = document.querySelectorAll('.product-item');
+        if (items.length <= 1) {
+            alert('至少保留一个产品');
+            return;
+        }
+        btn.closest('.product-item').remove();
+    }
+
+    // 计算单个产品小计
+    function calcSubtotal(input) {
+        const item = input.closest('.product-item');
+        const qty = parseFloat(item.querySelector('.quantity-input').value) || 0;
+        const price = parseFloat(item.querySelector('.unit-price-input').value) || 0;
+        item.querySelector('.subtotal-input').value = (qty * price).toFixed(2);
+    }
+
+    // 自动计算合同总价
+    function autoCalcTotal() {
+        let total = 0;
+        document.querySelectorAll('.subtotal-input').forEach(input => {
+            total += parseFloat(input.value) || 0;
+        });
+        document.getElementById('totalPrice').value = total.toFixed(2);
+    }
+
     function previewFile(input, previewId) {
         const preview = document.getElementById(previewId);
         const file = input.files[0];
@@ -166,43 +315,8 @@
         customerSuggestions.style.display = 'none';
     }
 
-    // 产品名称自动搜索
-    const productInput = document.getElementById('productNameInput');
-    const productSuggestions = document.getElementById('productSuggestions');
-    let productTimeout;
-    productInput.addEventListener('input', function() {
-        clearTimeout(productTimeout);
-        const query = this.value;
-        if (query.length < 1) {
-            productSuggestions.style.display = 'none';
-            return;
-        }
-        productTimeout = setTimeout(() => {
-            fetch('/api/products/search?q=' + encodeURIComponent(query))
-                .then(r => r.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        productSuggestions.innerHTML = data.map(p =>
-                            '<div style="padding:8px; cursor:pointer;" onclick="selectProduct(\'' + p.name + '\', \'' + (p.model || '') + '\', \'' + (p.unit || '') + '\')">' + p.name + (p.model ? ' - ' + p.model : '') + '</div>'
-                        ).join('');
-                        productSuggestions.style.display = 'block';
-                    } else {
-                        productSuggestions.style.display = 'none';
-                    }
-                });
-        }, 300);
-    });
-
-    function selectProduct(name, model, unit) {
-        productInput.value = name;
-        if (model) document.getElementById('modelInput').value = model;
-        if (unit) document.getElementById('unitInput').value = unit;
-        productSuggestions.style.display = 'none';
-    }
-
     document.addEventListener('click', function(e) {
         if (!customerInput.contains(e.target)) customerSuggestions.style.display = 'none';
-        if (!productInput.contains(e.target)) productSuggestions.style.display = 'none';
     });
     </script>
     <button type="submit" class="btn btn-success">保存</button>
