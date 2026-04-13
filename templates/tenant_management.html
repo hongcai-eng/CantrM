@@ -25,6 +25,24 @@
             <label>初始密码*</label>
             <input type="password" name="admin_password" required placeholder="至少6位">
         </div>
+        <div class="form-group">
+            <label>管理员角色</label>
+            <select name="admin_role">
+                <option value="超级管理员">超级管理员</option>
+                <option value="管理员">管理员</option>
+                <option value="录入人员">录入人员</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>权限</label>
+            <div style="display:flex;gap:15px;flex-wrap:wrap;padding:8px 0;">
+                {% for perm in ['增加','删除','修改','查阅','上传','下载'] %}
+                <label style="font-weight:normal;display:flex;align-items:center;gap:4px;">
+                    <input type="checkbox" name="permissions" value="{{ perm }}" checked> {{ perm }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
         <button type="submit" class="btn btn-success">创建</button>
         <button type="button" onclick="document.getElementById('newTenantForm').style.display='none'" class="btn btn-secondary">取消</button>
     </form>
@@ -58,13 +76,44 @@
             <td>{{ tenant.created_at.strftime('%Y-%m-%d') }}</td>
             <td>{{ tenant.users|length }}</td>
             <td>
-                <a href="{{ url_for('users') }}?tenant_id={{ tenant.id }}" class="btn btn-secondary">查看用户</a>
+                <a href="{{ url_for('tenant_users', tenant_id=tenant.id) }}" class="btn btn-secondary">查看用户</a>
                 <button onclick="showBrandingForm({{ tenant.id }}, '{{ tenant.name }}', '{{ tenant.company_name or '' }}', '{{ tenant.logo_file or '' }}')" class="btn btn-primary">设置品牌</button>
+                <button onclick="showEditForm({{ tenant.id }}, '{{ tenant.name }}', '{{ tenant.description or '' }}', '{{ tenant.users[0].username if tenant.users else '' }}')" class="btn btn-success">编辑</button>
+                <form method="POST" action="/tenant/{{ tenant.id }}/delete" style="display:inline;" onsubmit="return confirm('确认删除租户「{{ tenant.name }}」及其所有用户？')">
+                    <button type="submit" class="btn btn-danger">删除</button>
+                </form>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+
+<!-- 编辑租户弹窗 -->
+<div id="editModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;">
+    <div style="background:white;width:500px;margin:100px auto;padding:30px;border-radius:8px;">
+        <h3>编辑租户</h3>
+        <form method="POST" id="editForm">
+            <div class="form-group">
+                <label>租户名称*</label>
+                <input type="text" name="tenant_name" id="editTenantName" required>
+            </div>
+            <div class="form-group">
+                <label>描述</label>
+                <textarea name="description" id="editDescription"></textarea>
+            </div>
+            <div class="form-group">
+                <label>管理员账号</label>
+                <input type="text" name="admin_username" id="editAdminUsername" placeholder="留空则不修改">
+            </div>
+            <div class="form-group">
+                <label>新密码</label>
+                <input type="password" name="admin_password" id="editAdminPassword" placeholder="留空则不修改">
+            </div>
+            <button type="submit" class="btn btn-success">保存</button>
+            <button type="button" onclick="document.getElementById('editModal').style.display='none'" class="btn btn-secondary">取消</button>
+        </form>
+    </div>
+</div>
 
 <!-- 品牌设置弹窗 -->
 <div id="brandingModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;">
@@ -87,6 +136,15 @@
 </div>
 
 <script>
+function showEditForm(tenantId, tenantName, description, adminUsername) {
+    document.getElementById('editTenantName').value = tenantName;
+    document.getElementById('editDescription').value = description;
+    document.getElementById('editAdminUsername').value = adminUsername || '';
+    document.getElementById('editAdminPassword').value = '';
+    document.getElementById('editForm').action = '/tenant/' + tenantId + '/edit';
+    document.getElementById('editModal').style.display = 'block';
+}
+
 function showBrandingForm(tenantId, tenantName, companyName, logoFile) {
     document.getElementById('brandingTitle').textContent = '设置租户品牌 - ' + tenantName;
     document.getElementById('brandingCompanyName').value = companyName;

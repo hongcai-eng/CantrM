@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
 <div style="margin-bottom: 20px;">
+    {% if session.username != 'superadmin' %}
     <a href="{{ url_for('new_contract') }}" class="btn btn-primary">新建合同</a>
+    {% endif %}
     <a href="{{ url_for('import_contracts') }}" class="btn btn-success">导入Excel</a>
     <a href="javascript:void(0)" onclick="startExport()" class="btn btn-secondary">导出Excel</a>
 </div>

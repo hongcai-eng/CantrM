@@ -26,6 +26,7 @@
                     <div class="form-group">
                         <label>产品名称</label>
                         <input type="text" name="products[product_name][]" class="product-name-input" value="{{ cp.product_name }}" autocomplete="off">
+                        <small style="color:#888;">可从<a href="{{ url_for('products') }}" target="_blank">产品管理</a>中选择</small>
                     </div>
                     <div class="form-group">
                         <label>合同类型</label>
@@ -184,6 +185,54 @@
         {% endif %}
     </div>
     <script>
+    // 产品名称搜索提示（绑定到某个输入框）
+    function bindProductSearch(input) {
+        let suggestBox = input.nextElementSibling;
+        if (!suggestBox || !suggestBox.classList.contains('product-suggestions')) {
+            suggestBox = document.createElement('div');
+            suggestBox.className = 'product-suggestions';
+            suggestBox.style.cssText = 'border:1px solid #ddd;display:none;position:absolute;background:white;z-index:1000;max-height:200px;overflow-y:auto;width:100%;';
+            input.parentNode.style.position = 'relative';
+            input.insertAdjacentElement('afterend', suggestBox);
+        }
+        let t;
+        input.addEventListener('input', function() {
+            clearTimeout(t);
+            const q = this.value;
+            if (q.length < 1) { suggestBox.style.display = 'none'; return; }
+            t = setTimeout(() => {
+                fetch('/api/products/search?q=' + encodeURIComponent(q))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            suggestBox.innerHTML = data.map(p =>
+                                '<div style="padding:8px;cursor:pointer;" onclick="selectProduct(this,\'' +
+                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
+                                (p.unit||'').replace(/'/g,"&#39;") + '\')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
+                            ).join('');
+                        } else {
+                            suggestBox.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配产品，可<a href="/products" target="_blank">去产品管理添加</a>后刷新，或直接输入新名称</div>';
+                        }
+                        suggestBox.style.display = 'block';
+                    });
+            }, 300);
+        });
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target)) suggestBox.style.display = 'none';
+        });
+    }
+
+    function selectProduct(el, name, model, unit) {
+        const item = el.closest('.product-item');
+        item.querySelector('.product-name-input').value = name;
+        if (model) item.querySelector('.model-input').value = model;
+        if (unit) item.querySelector('.unit-input').value = unit;
+        el.closest('.product-suggestions').style.display = 'none';
+    }
+
+    // 页面加载时绑定已有产品输入框
+    document.querySelectorAll('.product-name-input').forEach(bindProductSearch);
+
     // 添加产品
     function addProduct() {
         const container = document.getElementById('productsContainer');
@@ -191,9 +240,10 @@
             <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
                 <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
                 <div class="form-row">
-                    <div class="form-group">
+                    <div class="form-group" style="position:relative;">
                         <label>产品名称</label>
                         <input type="text" name="products[product_name][]" class="product-name-input" autocomplete="off">
+                        <small style="color:#888;">输入搜索，未找到可<a href="/products" target="_blank">去产品管理添加</a></small>
                     </div>
                     <div class="form-group">
                         <label>合同类型</label>
@@ -238,6 +288,9 @@
             </div>
         `;
         container.insertAdjacentHTML('beforeend', template);
+        // 绑定新增产品输入框的搜索事件
+        const newInputs = container.querySelectorAll('.product-name-input');
+        bindProductSearch(newInputs[newInputs.length - 1]);
     }
 
     // 删除产品
@@ -300,11 +353,12 @@
                 .then(data => {
                     if (data.length > 0) {
                         customerSuggestions.innerHTML = data.map(c =>
-                            '<div style="padding:8px; cursor:pointer;" onclick="selectCustomer(\'' + c.name + '\')">' + c.name + (c.province ? ' (' + c.province + ')' : '') + '</div>'
+                            '<div style="padding:8px; cursor:pointer;" onclick="selectCustomer(\'' + c.name.replace(/'/g,"&#39;") + '\')">' + c.name + (c.province ? ' (' + c.province + ')' : '') + '</div>'
                         ).join('');
                         customerSuggestions.style.display = 'block';
                     } else {
-                        customerSuggestions.style.display = 'none';
+                        customerSuggestions.innerHTML = '<div style="padding:8px; color:#888;">未找到匹配客户，可<a href="/customers" target="_blank">去客户管理添加</a>后刷新，或直接输入新名称（将自动同步）</div>';
+                        customerSuggestions.style.display = 'block';
                     }
                 });
         }, 300);

@@ -68,7 +68,19 @@ def inject_company():
     except Exception:
         pass
 
-    return dict(company_name=company_name, company_logo_file=company_logo_file)
+    current_tenant_name = None
+    try:
+        user_id = session.get('user_id')
+        if user_id:
+            user = User.query.get(user_id)
+            if user and user.customer_id:
+                t = TenantCustomer.query.get(user.customer_id)
+                if t:
+                    current_tenant_name = t.name
+    except Exception:
+        pass
+
+    return dict(company_name=company_name, company_logo_file=company_logo_file, current_tenant_name=current_tenant_name)
 
 
 # ── 辅助：判断当前登录者是否为 superadmin ──
@@ -135,6 +147,8 @@ def login():
             session['username'] = user.username
             session['role'] = user.role
             flash('登录成功', 'success')
+            if username == 'superadmin':
+                return redirect(url_for('tenant_management'))
             return redirect(url_for('index'))
         flash('用户名或密码错误', 'warning')
     return render_template('login.html')
@@ -189,6 +203,11 @@ def logout():
 @app.route('/')
 @login_required
 def index():
+    # 新增：superadmin 不应访问合同列表，直接重定向到租户管理
+    if is_superadmin():
+        flash('总超级管理员请在租户管理界面操作，不可查看租户合同数据', 'warning')
+        return redirect(url_for('tenant_management'))
+
     from sqlalchemy import func
     query = Contract.query
 
@@ -344,6 +363,11 @@ def users():
         flash('权限不足', 'warning')
         return redirect(url_for('index'))
 
+    # 新增：superadmin 不应查看租户人员，重定向到租户管理
+    if is_superadmin():
+        flash('请在租户管理界面管理各租户的用户', 'warning')
+        return redirect(url_for('tenant_management'))
+
     # 新增：客户超级管理员只能看到自己租户下的用户
     customer_id = get_current_customer_id()
     if customer_id is not None:
@@ -374,7 +398,19 @@ def tenant_management():
     return render_template('tenant_management.html', tenants=tenants)
 
 
-# 新增：创建租户客户
+@app.route('/tenant/<int:tenant_id>/users')
+@login_required
+def tenant_users(tenant_id):
+    """superadmin 查看某租户的用户列表"""
+    if not is_superadmin():
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+    tenant = TenantCustomer.query.get_or_404(tenant_id)
+    users = User.query.filter_by(customer_id=tenant_id).all()
+    return render_template('tenant_users.html', tenant=tenant, users=users)
+
+
+
 @app.route('/tenant/create', methods=['POST'])
 @login_required
 def create_tenant():
@@ -386,6 +422,12 @@ def create_tenant():
     description = request.form.get('description', '')
     admin_username = request.form['admin_username']
     admin_password = request.form['admin_password']
+    admin_role = request.form.get('admin_role', '超级管理员')
+    selected_perms = request.form.getlist('permissions')
+    if selected_perms:
+        permissions_str = ','.join(selected_perms)
+    else:
+        permissions_str = 'all'
 
     # 检查租户名称是否重复
     if TenantCustomer.query.filter_by(name=tenant_name).first():
@@ -393,20 +435,26 @@ def create_tenant():
         return redirect(url_for('tenant_management'))
 
     # 检查管理员账号是否重复
-    if User.query.filter_by(username=admin_username).first():
-        flash('管理员账号已存在', 'warning')
-        return redirect(url_for('tenant_management'))
+    existing_user = User.query.filter_by(username=admin_username).first()
+    if existing_user:
+        # 如果该账号关联的租户已不存在（孤儿账号），自动清除并允许继续
+        if existing_user.customer_id is not None and TenantCustomer.query.get(existing_user.customer_id) is None:
+            db.session.delete(existing_user)
+            db.session.flush()
+        else:
+            flash(f'管理员账号"{admin_username}"已存在，请换一个账号名称', 'warning')
+            return redirect(url_for('tenant_management'))
 
     # 创建租户
     tenant = TenantCustomer(name=tenant_name, description=description)
     db.session.add(tenant)
     db.session.flush()
 
-    # 创建该租户的客户超级管理员
+    # 创建该租户的管理员（角色和权限由表单指定）
     admin = User(
         username=admin_username,
-        role='超级管理员',
-        permissions='all',
+        role=admin_role,
+        permissions=permissions_str,
         customer_id=tenant.id
     )
     admin.set_password(admin_password)
@@ -439,6 +487,66 @@ def tenant_branding(tenant_id):
 
     db.session.commit()
     flash(f'租户"{tenant.name}"的品牌信息已更新', 'success')
+    return redirect(url_for('tenant_management'))
+
+
+@app.route('/user/<int:id>/reset_password', methods=['POST'])
+@login_required
+def reset_user_password(id):
+    """superadmin 重置租户用户密码"""
+    if not is_superadmin():
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+    user = User.query.get_or_404(id)
+    user.set_password(request.form['password'])
+    db.session.commit()
+    flash(f'用户"{user.username}"密码已重置', 'success')
+    return redirect(url_for('tenant_users', tenant_id=user.customer_id))
+
+
+
+@app.route('/tenant/<int:tenant_id>/edit', methods=['POST'])
+@login_required
+def tenant_edit(tenant_id):
+    if not is_superadmin():
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+    tenant = TenantCustomer.query.get_or_404(tenant_id)
+    tenant.name = request.form.get('tenant_name', tenant.name).strip()
+    tenant.description = request.form.get('description', tenant.description)
+
+    # 新增：支持修改管理员账号和密码
+    new_username = request.form.get('admin_username', '').strip()
+    new_password = request.form.get('admin_password', '').strip()
+    if new_username or new_password:
+        admin = User.query.filter_by(customer_id=tenant_id).first()
+        if admin:
+            if new_username and new_username != admin.username:
+                if User.query.filter_by(username=new_username).first():
+                    flash(f'账号"{new_username}"已存在', 'warning')
+                    return redirect(url_for('tenant_management'))
+                admin.username = new_username
+            if new_password:
+                admin.set_password(new_password)
+
+    db.session.commit()
+    flash('租户信息已更新', 'success')
+    return redirect(url_for('tenant_management'))
+
+
+@app.route('/tenant/<int:tenant_id>/delete', methods=['POST'])
+@login_required
+def tenant_delete(tenant_id):
+    if not is_superadmin():
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+    tenant = TenantCustomer.query.get_or_404(tenant_id)
+    name = tenant.name
+    User.query.filter_by(customer_id=tenant_id).delete(synchronize_session='fetch')
+    db.session.flush()
+    db.session.delete(tenant)
+    db.session.commit()
+    flash(f'租户"{name}"已删除', 'success')
     return redirect(url_for('tenant_management'))
 
 

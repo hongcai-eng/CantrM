@@ -37,28 +37,41 @@
 </head>
 <body>
     <div class="nav">
+        {# ── superadmin：只显示"租户管理"和"系统配置" ── #}
+        {% if session.username == 'superadmin' %}
+        <a href="{{ url_for('tenant_management') }}">租户管理</a>
+        <a href="{{ url_for('sysconfig') }}">系统配置</a>
+        {% else %}
+        {# ── 普通用户 / 租户管理员：显示完整菜单 ── #}
         <a href="{{ url_for('index') }}">合同列表</a>
         <a href="{{ url_for('customers') }}">客户管理</a>
         <a href="{{ url_for('products') }}">产品管理</a>
         <a href="{{ url_for('statistics') }}">统计分析</a>
         {% if session.role == '超级管理员' %}
         <a href="{{ url_for('users') }}">用户管理</a>
-        {% if session.username == 'superadmin' %}
-        <a href="{{ url_for('tenant_management') }}">租户管理</a>
-        {% else %}
         <a href="{{ url_for('organizations') }}">组织管理</a>
-        {% endif %}
         <a href="{{ url_for('sysconfig') }}">系统配置</a>
         {% endif %}
+        {% endif %}
         <span class="right">
+            {# ── 需求3：显示登录用户所属租户标识 ── #}
+            {% if current_tenant_name %}
+            <span style="color: #adf; padding: 10px 5px; font-size:13px;">【{{ current_tenant_name }} - 合同管理系统】</span>
+            {% elif session.username == 'superadmin' %}
+            <span style="color: #adf; padding: 10px 5px; font-size:13px;">【系统总后台】</span>
+            {% endif %}
             <span style="color: white; padding: 10px;">{{ session.username }} ({{ session.role }})</span>
             <a href="{{ url_for('logout') }}">退出</a>
         </span>
     </div>
     <div class="container">
         <div class="page-title">
+            {% if session.username == 'superadmin' %}
+            <h1>系统总后台 - 合同管理系统</h1>
+            {% else %}
             {% if company_logo_file %}<img src="{{ url_for('static', filename=company_logo_file) }}" alt="logo">{% endif %}
             <h1>{% if company_name %}{{ company_name }} - {% endif %}合同管理系统</h1>
+            {% endif %}
         </div>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
