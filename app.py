@@ -321,32 +321,62 @@ def export_contracts():
 
     contracts = query.order_by(Contract.created_at.desc()).all()
 
+    # 修改：每个ContractProduct一行（多产品展开），列顺序按需求，去掉"具体子类"
     data = []
     for c in contracts:
-        data.append({
-            '客户名称': c.customer_name,
-            '项目名称': c.project_name,
-            '产品名称': c.product_name or '',
-            '型号': c.model or '',
-            '单位': c.unit or '',
-            '数量': c.quantity,
-            '单价': c.unit_price,
-            '合同总价': c.total_price,
-            '发票税率': c.tax_rate,
-            '合同类型': c.contract_type or '',
-            '业务类型': c.business_type or '',
-            '具体子类': c.sub_type or '',
-            '项目负责人': c.project_staff or '',
-            '销售人员': c.sales_staff or '',
-            '签订日期': str(c.signing_date) if c.signing_date else '',
-            '状态': c.status or '',
-            '已收付款': c.get_total_paid(),
-            '未收付款': c.get_unpaid_amount(),
-            '已开票': c.get_total_invoiced(),
-            '未开票': c.get_uninvoiced_amount(),
-        })
+        products = ContractProduct.query.filter_by(contract_id=c.id).all()
+        if products:
+            for cp in products:
+                data.append({
+                    '客户名称': c.customer_name,
+                    '项目名称': c.project_name,
+                    '产品名称': cp.product_name or '',
+                    '型号': cp.model or '',
+                    '单位': cp.unit or '',
+                    '数量': cp.quantity,
+                    '单价': cp.unit_price,
+                    '合同总价': c.total_price,
+                    '发票税率': cp.tax_rate,
+                    '合同类型': cp.contract_type or '',
+                    '业务类型': c.business_type or '',
+                    '项目负责人': c.project_staff or '',
+                    '销售人员': c.sales_staff or '',
+                    '签订日期': str(c.signing_date) if c.signing_date else '',
+                    '状态': c.status or '',
+                    '已收付款': c.get_total_paid(),
+                    '未收付款': c.get_unpaid_amount(),
+                    '已开票': c.get_total_invoiced(),
+                    '未开票': c.get_uninvoiced_amount(),
+                })
+        else:
+            # 合同无产品记录时，输出合同级别的一行（向后兼容）
+            data.append({
+                '客户名称': c.customer_name,
+                '项目名称': c.project_name,
+                '产品名称': c.product_name or '',
+                '型号': c.model or '',
+                '单位': c.unit or '',
+                '数量': c.quantity,
+                '单价': c.unit_price,
+                '合同总价': c.total_price,
+                '发票税率': c.tax_rate,
+                '合同类型': c.contract_type or '',
+                '业务类型': c.business_type or '',
+                '项目负责人': c.project_staff or '',
+                '销售人员': c.sales_staff or '',
+                '签订日期': str(c.signing_date) if c.signing_date else '',
+                '状态': c.status or '',
+                '已收付款': c.get_total_paid(),
+                '未收付款': c.get_unpaid_amount(),
+                '已开票': c.get_total_invoiced(),
+                '未开票': c.get_uninvoiced_amount(),
+            })
 
-    df = pd.DataFrame(data)
+    # 按指定列顺序输出
+    columns = ['客户名称', '项目名称', '产品名称', '型号', '单位', '数量', '单价',
+               '合同总价', '发票税率', '合同类型', '业务类型', '项目负责人', '销售人员',
+               '签订日期', '状态', '已收付款', '未收付款', '已开票', '未开票']
+    df = pd.DataFrame(data, columns=columns)
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='合同列表')
@@ -991,6 +1021,45 @@ def search_products():
     } for p in products])
 
 
+# ── 新增：自动更新合同状态（已收付款>=合同总价 且 已开票>=合同总价 则标记已完结）──
+def auto_update_contract_status(contract):
+    """检查合同是否满足完结条件，并自动更新状态"""
+    total_paid = contract.get_total_paid()
+    total_invoiced = contract.get_total_invoiced()
+    if contract.total_price > 0 and total_paid >= contract.total_price and total_invoiced >= contract.total_price:
+        if contract.status != '已完结':
+            contract.status = '已完结'
+    # 注意：不自动从"已完结"回退到"进行中"，避免误操作
+
+
+# ── 新增：将合同中的产品名称同步到 Product 表（新产品则创建，已有则跳过）──
+def sync_products_to_table(product_names, models, units, tax_rates, customer_id):
+    """将新建/编辑合同中的产品名称同步到产品管理表"""
+    for i, pname in enumerate(product_names):
+        pname = pname.strip() if pname else ''
+        if not pname:
+            continue
+        existing = Product.query.filter_by(name=pname, customer_id=customer_id).first()
+        if not existing:
+            model_val = models[i].strip() if i < len(models) and models[i] else None
+            unit_val = units[i].strip() if i < len(units) and units[i] else None
+            tax_val = None
+            if i < len(tax_rates) and tax_rates[i]:
+                try:
+                    tax_val = float(tax_rates[i])
+                except (ValueError, TypeError):
+                    tax_val = None
+            new_product = Product(
+                name=pname,
+                category='其他',  # 默认分类，用户可在产品管理页修改
+                model=model_val or None,
+                unit=unit_val or None,
+                tax_rate=tax_val,
+                customer_id=customer_id
+            )
+            db.session.add(new_product)
+
+
 @app.route('/statistics')
 @login_required
 def statistics():
@@ -1021,13 +1090,26 @@ def statistics():
     if f_year:
         q = q.filter(func.strftime('%Y', Contract.signing_date) == f_year)
 
-    stats = {
-        'by_staff': q.with_entities(Contract.project_staff, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.project_staff).all(),
-        'by_customer': q.with_entities(Contract.customer_name, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.customer_name).all(),
-        'by_type': q.with_entities(Contract.contract_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.contract_type).all(),
-        'by_status': q.with_entities(Contract.status, func.count(Contract.id)).group_by(Contract.status).all(),
-        'by_business': q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all(),
-    }
+    # 新增：f_sheets 参数——控制页面上显示哪些维度的统计表格
+    # 默认全部显示；用户勾选后只显示选中的
+    # 注意：表单 checkbox 以多值形式发送（f_sheets=staff&f_sheets=customer），用 getlist 读取
+    all_sheets = ['staff', 'customer', 'type', 'business', 'status']
+    selected_sheets = [s for s in request.args.getlist('f_sheets') if s in all_sheets]
+    if not selected_sheets:
+        selected_sheets = all_sheets  # 默认全部
+
+    stats = {}
+    if 'staff' in selected_sheets:
+        stats['by_staff'] = q.with_entities(Contract.project_staff, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.project_staff).all()
+    if 'customer' in selected_sheets:
+        stats['by_customer'] = q.with_entities(Contract.customer_name, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.customer_name).all()
+    if 'type' in selected_sheets:
+        stats['by_type'] = q.with_entities(Contract.contract_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.contract_type).all()
+    if 'status' in selected_sheets:
+        stats['by_status'] = q.with_entities(Contract.status, func.count(Contract.id)).group_by(Contract.status).all()
+    if 'business' in selected_sheets:
+        stats['by_business'] = q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all()
+
     filters = {'f_staff': f_staff, 'f_customer': f_customer, 'f_type': f_type,
                'f_business': f_business, 'f_status': f_status, 'f_year': f_year}
 
@@ -1037,7 +1119,8 @@ def statistics():
     ).distinct().order_by(func.strftime('%Y', Contract.signing_date).desc()).all()
     available_years = [int(y[0]) for y in years_raw if y[0]]
 
-    return render_template('statistics.html', stats=stats, filters=filters, available_years=available_years)
+    return render_template('statistics.html', stats=stats, filters=filters,
+                           available_years=available_years, selected_sheets=selected_sheets)
 
 
 # ── 新增：统计分析导出 Excel ──
@@ -1157,6 +1240,9 @@ def new_contract():
                 )
                 db.session.add(cp)
 
+        # 新增：将产品名称同步到产品管理表（仅新产品）
+        sync_products_to_table(product_names, models, units, tax_rates, customer_id)
+
         db.session.commit()
         flash('合同创建成功', 'success')
         return redirect(url_for('index'))
@@ -1246,6 +1332,9 @@ def edit_contract(id):
                 )
                 db.session.add(cp)
 
+        # 新增：将产品名称同步到产品管理表（仅新产品）
+        sync_products_to_table(product_names, models, units, tax_rates, customer_id)
+
         db.session.commit()
         flash('合同更新成功', 'success')
         return redirect(url_for('view_contract', id=id))
@@ -1280,6 +1369,11 @@ def add_payment(id):
 
     db.session.add(payment)
     db.session.commit()
+    # 新增：自动更新合同状态
+    contract = Contract.query.get(id)
+    if contract:
+        auto_update_contract_status(contract)
+        db.session.commit()
     flash('收付款记录添加成功', 'success')
     return redirect(url_for('view_contract', id=id))
 
@@ -1331,6 +1425,11 @@ def add_invoice(id):
 
     db.session.add(invoice)
     db.session.commit()
+    # 新增：自动更新合同状态
+    contract = Contract.query.get(id)
+    if contract:
+        auto_update_contract_status(contract)
+        db.session.commit()
     flash('发票记录添加成功', 'success')
     return redirect(url_for('view_contract', id=id))
 
@@ -1365,41 +1464,49 @@ def import_contracts():
             # 过滤全空行
             df = df[~(df['客户名称'].isna() & df['项目名称'].isna())]
 
-            # 新增：重复导入检测（只提示，不允许确认导入）
-            duplicates = []
+            # ── 修改：按 (客户名称, 项目名称) 分组，支持多产品同一合同 ──
+            from collections import OrderedDict
+            contract_groups = OrderedDict()
             for idx, row in df.iterrows():
                 cname = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else ''
                 pname = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else ''
-                total_val = row.get('合同总价', 0)
+                key = (cname, pname)
+                if key not in contract_groups:
+                    contract_groups[key] = []
+                contract_groups[key].append((idx, row))
+
+            # 重复导入检测：按合同级别（客户名称+项目名称+合同总价）去重
+            duplicates = []
+            for (cname, pname), rows in contract_groups.items():
+                # 取第一行的合同总价作为合同级别数据
+                first_idx, first_row = rows[0]
+                total_val = first_row.get('合同总价', 0)
                 total_val = float(total_val) if pd.notna(total_val) else 0
 
-                # 新增：数据隔离检查
                 q = Contract.query.filter_by(customer_name=cname, project_name=pname, total_price=total_val)
                 if customer_id is not None:
                     q = q.filter_by(customer_id=customer_id)
                 exists = q.first()
 
                 if exists:
-                    duplicates.append(f"第{idx+2}行：{cname} / {pname} / ¥{total_val}")
+                    duplicates.append(f"{cname} / {pname} / ¥{total_val}（共{len(rows)}个产品）")
 
             if duplicates:
                 return render_template('import.html', duplicates=duplicates)
 
             count = 0
             errors = []
-            for idx, row in df.iterrows():
+            for (cname, pname), rows in contract_groups.items():
                 try:
-                    total_val = row.get('合同总价', 0)
+                    # 取第一行作为合同级别数据
+                    first_idx, first_row = rows[0]
+                    total_val = first_row.get('合同总价', 0)
                     if pd.isna(total_val):
                         total_val = 0
-                    staff_val = row.get('项目负责人') if '项目负责人' in df.columns else row.get('项目人员')
-
-                    customer_name = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else None
-                    project_name = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else None
-
-                    business_type_val = str(row.get('业务类型', '销售')) if pd.notna(row.get('业务类型', None)) else '销售'
+                    staff_val = first_row.get('项目负责人') if '项目负责人' in df.columns else first_row.get('项目人员')
+                    business_type_val = str(first_row.get('业务类型', '销售')) if pd.notna(first_row.get('业务类型', None)) else '销售'
                     signing_date_val = None
-                    raw_date = row.get('签订日期', None)
+                    raw_date = first_row.get('签订日期', None)
                     if raw_date is not None and pd.notna(raw_date):
                         try:
                             signing_date_val = pd.to_datetime(raw_date).date()
@@ -1408,45 +1515,64 @@ def import_contracts():
 
                     # 创建合同主记录
                     contract = Contract(
-                        customer_name=customer_name or '未知客户',
-                        project_name=project_name or '未知项目',
+                        customer_name=cname or '未知客户',
+                        project_name=pname or '未知项目',
                         total_price=float(total_val),
                         project_staff=str(staff_val) if staff_val is not None and pd.notna(staff_val) else None,
-                        sales_staff=str(row.get('销售人员', '')) if pd.notna(row.get('销售人员', None)) else None,
+                        sales_staff=str(first_row.get('销售人员', '')) if pd.notna(first_row.get('销售人员', None)) else None,
                         business_type=business_type_val,
-                        status=str(row.get('状态', '进行中')) if pd.notna(row.get('状态', None)) else '进行中',
+                        status=str(first_row.get('状态', '进行中')) if pd.notna(first_row.get('状态', None)) else '进行中',
                         signing_date=signing_date_val,
-                        customer_id=customer_id  # 新增：关联租户
+                        customer_id=customer_id  # 关联租户
                     )
                     db.session.add(contract)
-                    db.session.flush()  # 获取contract.id
+                    db.session.flush()  # 获取 contract.id
 
-                    # 新增：创建产品记录（支持工程/货物/服务组合）
-                    product_name = str(row.get('产品名称', '')) if pd.notna(row.get('产品名称', None)) else None
-                    if product_name:
-                        cp = ContractProduct(
-                            contract_id=contract.id,
-                            product_name=product_name,
-                            contract_type=str(row.get('合同类型', '')) if pd.notna(row.get('合同类型', None)) else None,
-                            model=str(row.get('型号', '')) if pd.notna(row.get('型号', None)) else None,
-                            unit=str(row.get('单位', '')) if pd.notna(row.get('单位', None)) else None,
-                            quantity=float(row.get('数量', 0)) if pd.notna(row.get('数量', None)) else None,
-                            unit_price=float(row.get('单价', 0)) if pd.notna(row.get('单价', None)) else None,
-                            tax_rate=float(row.get('发票税率', 0)) if pd.notna(row.get('发票税率', None)) else None
-                        )
-                        # 计算小计
-                        if cp.quantity and cp.unit_price:
-                            cp.subtotal = cp.quantity * cp.unit_price
-                        db.session.add(cp)
+                    # 自动同步客户信息
+                    if cname and not Customer.query.filter_by(name=cname, customer_id=customer_id).first():
+                        db.session.add(Customer(name=cname, customer_id=customer_id))
+
+                    # ── 每一行对应一个产品 ──
+                    for row_idx, row in rows:
+                        product_name = str(row.get('产品名称', '')) if pd.notna(row.get('产品名称', None)) else None
+                        if product_name:
+                            cp = ContractProduct(
+                                contract_id=contract.id,
+                                product_name=product_name,
+                                contract_type=str(row.get('合同类型', '')) if pd.notna(row.get('合同类型', None)) else None,
+                                model=str(row.get('型号', '')) if pd.notna(row.get('型号', None)) else None,
+                                unit=str(row.get('单位', '')) if pd.notna(row.get('单位', None)) else None,
+                                quantity=float(row.get('数量', 0)) if pd.notna(row.get('数量', None)) else None,
+                                unit_price=float(row.get('单价', 0)) if pd.notna(row.get('单价', None)) else None,
+                                tax_rate=float(row.get('发票税率', 0)) if pd.notna(row.get('发票税率', None)) else None
+                            )
+                            # 计算小计
+                            if cp.quantity and cp.unit_price:
+                                cp.subtotal = cp.quantity * cp.unit_price
+                            db.session.add(cp)
+
+                            # 新增：同步产品到产品管理表
+                            if not Product.query.filter_by(name=product_name, customer_id=customer_id).first():
+                                model_val = str(row.get('型号', '')) if pd.notna(row.get('型号', None)) else None
+                                unit_val = str(row.get('单位', '')) if pd.notna(row.get('单位', None)) else None
+                                tax_val = float(row.get('发票税率', 0)) if pd.notna(row.get('发票税率', None)) else None
+                                db.session.add(Product(
+                                    name=product_name,
+                                    category='其他',
+                                    model=model_val or None,
+                                    unit=unit_val or None,
+                                    tax_rate=tax_val,
+                                    customer_id=customer_id
+                                ))
 
                     count += 1
                 except Exception as row_err:
-                    errors.append(f"第{idx+2}行: {str(row_err)}")
+                    errors.append(f"{cname}/{pname}: {str(row_err)}")
 
             db.session.commit()
             msg = f'成功导入 {count} 条合同记录'
             if errors:
-                msg += f'，{len(errors)} 行跳过：' + '；'.join(errors[:3])
+                msg += f'，{len(errors)} 条跳过：' + '；'.join(errors[:3])
             flash(msg, 'success')
             return redirect(url_for('index'))
         except Exception as e:

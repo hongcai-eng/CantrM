@@ -21,7 +21,7 @@
     <button onclick="document.getElementById('exportDialog').style.display='none'" class="btn btn-secondary">取消</button>
 </div>
 
-<!-- 新增：下载完成提示 -->
+<!-- 下载完成提示 -->
 <div id="exportComplete" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#d4edda;padding:30px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:10000;text-align:center;border-left:4px solid #28a745;">
     <div style="font-size:16px;margin-bottom:10px;color:#155724;">✓ 下载完成</div>
     <div style="color:#155724;font-size:13px;">Excel文件已生成，请查看浏览器下载目录</div>
@@ -42,11 +42,10 @@ function doExport() {
     if (sheets.length === 0) { alert('请至少选择一项'); return; }
     document.getElementById('exportingTip').style.display = 'block';
 
-    // 改进：正确拼接 URL，避免重复参数
     var url = "{{ url_for('export_statistics') }}";
     var params = new URLSearchParams(window.location.search);
-    params.delete('sheets'); // 删除旧的 sheets 参数
-    params.set('sheets', sheets.join(',')); // 设置新的 sheets 参数
+    params.delete('sheets');
+    params.set('sheets', sheets.join(','));
     url += '?' + params.toString();
 
     var a = document.createElement('a');
@@ -99,8 +98,7 @@ function doExport() {
             <select name="f_status">
                 <option value="">全部</option>
                 <option value="进行中" {% if filters.f_status=='进行中' %}selected{% endif %}>进行中</option>
-                <option value="已完成" {% if filters.f_status=='已完成' %}selected{% endif %}>已完成</option>
-                <option value="已终止" {% if filters.f_status=='已终止' %}selected{% endif %}>已终止</option>
+                <option value="已完结" {% if filters.f_status=='已完结' %}selected{% endif %}>已完结</option>
             </select>
         </div>
         <div class="form-group">
@@ -111,6 +109,27 @@ function doExport() {
                 <option value="{{ year }}" {% if filters.f_year == year|string %}selected{% endif %}>{{ year }}</option>
                 {% endfor %}
             </select>
+        </div>
+    </div>
+    <!-- 新增：显示维度勾选（控制页面统计表格的显示） -->
+    <div class="form-row" style="margin-top:10px;align-items:center;">
+        <div class="form-group" style="flex:none;">
+            <label style="font-weight:bold;margin-right:10px;">显示维度：</label>
+            <label style="margin-right:12px;font-weight:normal;">
+                <input type="checkbox" name="f_sheets" value="staff" {% if 'staff' in selected_sheets %}checked{% endif %}> 按项目负责人
+            </label>
+            <label style="margin-right:12px;font-weight:normal;">
+                <input type="checkbox" name="f_sheets" value="customer" {% if 'customer' in selected_sheets %}checked{% endif %}> 按客户
+            </label>
+            <label style="margin-right:12px;font-weight:normal;">
+                <input type="checkbox" name="f_sheets" value="type" {% if 'type' in selected_sheets %}checked{% endif %}> 按合同类型
+            </label>
+            <label style="margin-right:12px;font-weight:normal;">
+                <input type="checkbox" name="f_sheets" value="business" {% if 'business' in selected_sheets %}checked{% endif %}> 按业务类型
+            </label>
+            <label style="margin-right:12px;font-weight:normal;">
+                <input type="checkbox" name="f_sheets" value="status" {% if 'status' in selected_sheets %}checked{% endif %}> 按履约状态
+            </label>
         </div>
     </div>
     <button type="submit" class="btn btn-primary">筛选</button>
@@ -162,8 +181,18 @@ document.addEventListener('click', function(e) {
     if (!staffInput.contains(e.target)) staffSugg.style.display = 'none';
     if (!custInput.contains(e.target)) custSugg.style.display = 'none';
 });
+
+// 提交前验证：至少勾选一个维度
+document.querySelector('form').addEventListener('submit', function(e) {
+    var checked = document.querySelectorAll('input[name="f_sheets"]:checked');
+    if (checked.length === 0) {
+        alert('请至少勾选一个显示维度');
+        e.preventDefault();
+    }
+});
 </script>
 
+{% if 'staff' in selected_sheets and stats.by_staff is defined %}
 <h3>按项目负责人统计</h3>
 <table>
     <thead>
@@ -183,7 +212,9 @@ document.addEventListener('click', function(e) {
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 
+{% if 'customer' in selected_sheets and stats.by_customer is defined %}
 <h3>按客户名称统计</h3>
 <table>
     <thead>
@@ -203,7 +234,9 @@ document.addEventListener('click', function(e) {
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 
+{% if 'type' in selected_sheets and stats.by_type is defined %}
 <h3>按合同类型统计</h3>
 <table>
     <thead>
@@ -223,7 +256,9 @@ document.addEventListener('click', function(e) {
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 
+{% if 'business' in selected_sheets and stats.by_business is defined %}
 <h3>按业务类型统计</h3>
 <table>
     <thead>
@@ -243,7 +278,9 @@ document.addEventListener('click', function(e) {
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 
+{% if 'status' in selected_sheets and stats.by_status is defined %}
 <h3>按履约状态统计</h3>
 <table>
     <thead>
@@ -261,4 +298,5 @@ document.addEventListener('click', function(e) {
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 {% endblock %}

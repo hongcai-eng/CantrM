@@ -221,7 +221,7 @@ document.addEventListener('click', function(e) {
             <td>¥{{ "%.2f"|format(contract.total_price) }}</td>
             <td style="color:red;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td>
             <td style="color:orange;">¥{{ "%.2f"|format(contract.get_uninvoiced_amount()) }}</td>
-            <td>{{ contract.contract_type }}</td>
+            <td>{{ contract.products | map(attribute='contract_type') | select | unique | join('/') or contract.contract_type or '-' }}</td>
             <td>{{ contract.business_type }}</td>
             <td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td>
             <td>
