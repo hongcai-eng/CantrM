@@ -321,13 +321,13 @@ def export_contracts():
 
     contracts = query.order_by(Contract.created_at.desc()).all()
 
-    # 修改：每个ContractProduct一行（多产品展开），列顺序按需求，去掉"具体子类"
     data = []
     for c in contracts:
         products = ContractProduct.query.filter_by(contract_id=c.id).all()
         if products:
             for cp in products:
                 data.append({
+                    '合同编号': c.contract_number or '',
                     '客户名称': c.customer_name,
                     '项目名称': c.project_name,
                     '产品名称': cp.product_name or '',
@@ -337,7 +337,7 @@ def export_contracts():
                     '单价': cp.unit_price,
                     '合同总价': c.total_price,
                     '发票税率': cp.tax_rate,
-                    '合同类型': cp.contract_type or '',
+                    '合同类型': c.contract_type or '',
                     '业务类型': c.business_type or '',
                     '项目负责人': c.project_staff or '',
                     '销售人员': c.sales_staff or '',
@@ -349,8 +349,8 @@ def export_contracts():
                     '未开票': c.get_uninvoiced_amount(),
                 })
         else:
-            # 合同无产品记录时，输出合同级别的一行（向后兼容）
             data.append({
+                '合同编号': c.contract_number or '',
                 '客户名称': c.customer_name,
                 '项目名称': c.project_name,
                 '产品名称': c.product_name or '',
@@ -373,7 +373,7 @@ def export_contracts():
             })
 
     # 按指定列顺序输出
-    columns = ['客户名称', '项目名称', '产品名称', '型号', '单位', '数量', '单价',
+    columns = ['合同编号', '客户名称', '项目名称', '产品名称', '型号', '单位', '数量', '单价',
                '合同总价', '发票税率', '合同类型', '业务类型', '项目负责人', '销售人员',
                '签订日期', '状态', '已收付款', '未收付款', '已开票', '未开票']
     df = pd.DataFrame(data, columns=columns)
@@ -1106,7 +1106,7 @@ def statistics():
     if 'type' in selected_sheets:
         stats['by_type'] = q.with_entities(Contract.contract_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.contract_type).all()
     if 'status' in selected_sheets:
-        stats['by_status'] = q.with_entities(Contract.status, func.count(Contract.id)).group_by(Contract.status).all()
+        stats['by_status'] = q.with_entities(Contract.status, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.status).all()
     if 'business' in selected_sheets:
         stats['by_business'] = q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all()
 
@@ -1153,26 +1153,71 @@ def export_statistics():
     if f_year:
         q = q.filter(func.strftime('%Y', Contract.signing_date) == f_year)
 
-    # 需求10：按勾选的sheets参数决定导出哪些sheet
+    # 按勾选的sheets参数决定导出哪些sheet
     sheets = request.args.get('sheets', 'staff,customer,type,business,status').split(',')
+    layout = request.args.get('layout', 'vertical')  # vertical 或 horizontal
 
+    # 收集各维度数据
+    blocks = []  # [(col_name, data), ...]
+    if 'staff' in sheets:
+        blocks.append(('项目负责人', q.with_entities(Contract.project_staff, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.project_staff).all()))
+    if 'customer' in sheets:
+        blocks.append(('客户名称', q.with_entities(Contract.customer_name, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.customer_name).all()))
+    if 'type' in sheets:
+        blocks.append(('合同类型', q.with_entities(Contract.contract_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.contract_type).all()))
+    if 'business' in sheets:
+        blocks.append(('业务类型', q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all()))
+    if 'status' in sheets:
+        blocks.append(('履约状态', q.with_entities(Contract.status, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.status).all()))
+
+    import openpyxl
     buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-        if 'staff' in sheets:
-            by_staff = q.with_entities(Contract.project_staff, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.project_staff).all()
-            pd.DataFrame(by_staff, columns=['项目负责人', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按项目负责人')
-        if 'customer' in sheets:
-            by_customer = q.with_entities(Contract.customer_name, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.customer_name).all()
-            pd.DataFrame(by_customer, columns=['客户名称', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按客户')
-        if 'type' in sheets:
-            by_type = q.with_entities(Contract.contract_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.contract_type).all()
-            pd.DataFrame(by_type, columns=['合同类型', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按合同类型')
-        if 'business' in sheets:
-            by_business = q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all()
-            pd.DataFrame(by_business, columns=['业务类型', '合同数量', '合同总额']).to_excel(writer, index=False, sheet_name='按业务类型')
-        if 'status' in sheets:
-            by_status = q.with_entities(Contract.status, func.count(Contract.id)).group_by(Contract.status).all()
-            pd.DataFrame(by_status, columns=['状态', '合同数量']).to_excel(writer, index=False, sheet_name='按履约状态')
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = '统计分析'
+
+    if layout == 'multisheet':
+        # 方案C：每个维度单独一个 sheet
+        first = True
+        for col_name, data in blocks:
+            ws = wb.active if first else wb.create_sheet()
+            ws.title = col_name
+            first = False
+            ws.cell(row=1, column=1, value=col_name)
+            ws.cell(row=1, column=2, value='合同数量')
+            ws.cell(row=1, column=3, value='合同总额')
+            for i, r in enumerate(data, start=2):
+                ws.cell(row=i, column=1, value=r[0])
+                ws.cell(row=i, column=2, value=r[1])
+                ws.cell(row=i, column=3, value=float(r[2]) if r[2] else 0)
+    elif layout == 'horizontal':
+        # 方案B：横向排列，每维度占3列，列间空1列
+        col = 1
+        for col_name, data in blocks:
+            ws.cell(row=1, column=col, value=col_name)
+            ws.cell(row=1, column=col+1, value='合同数量')
+            ws.cell(row=1, column=col+2, value='合同总额')
+            for i, r in enumerate(data, start=2):
+                ws.cell(row=i, column=col, value=r[0])
+                ws.cell(row=i, column=col+1, value=r[1])
+                ws.cell(row=i, column=col+2, value=float(r[2]) if r[2] else 0)
+            col += 4  # 3列数据 + 1列空白
+    else:
+        # 方案A：纵向排列
+        row = 1
+        for col_name, data in blocks:
+            ws.cell(row=row, column=1, value=col_name)
+            ws.cell(row=row, column=2, value='合同数量')
+            ws.cell(row=row, column=3, value='合同总额')
+            row += 1
+            for r in data:
+                ws.cell(row=row, column=1, value=r[0])
+                ws.cell(row=row, column=2, value=r[1])
+                ws.cell(row=row, column=3, value=float(r[2]) if r[2] else 0)
+                row += 1
+            row += 1  # 空行分隔
+
+    wb.save(buf)
     buf.seek(0)
     filename = f"统计导出_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
     return send_file(buf, download_name=filename, as_attachment=True,
@@ -1189,9 +1234,11 @@ def new_contract():
 
         # 创建合同主记录
         contract = Contract(
+            contract_number=request.form.get('contract_number'),
             customer_name=request.form['customer_name'],
             project_name=request.form['project_name'],
             total_price=float(request.form['total_price']),
+            contract_type=request.form.get('contract_type'),
             project_staff=request.form.get('project_staff'),
             sales_staff=request.form.get('sales_staff'),
             business_type=request.form.get('business_type', '销售'),
@@ -1217,6 +1264,7 @@ def new_contract():
         # 新增：处理多产品数据
         product_names = request.form.getlist('products[product_name][]')
         contract_types = request.form.getlist('products[contract_type][]')
+        product_types = request.form.getlist('products[product_type][]')
         models = request.form.getlist('products[model][]')
         units = request.form.getlist('products[unit][]')
         quantities = request.form.getlist('products[quantity][]')
@@ -1231,6 +1279,7 @@ def new_contract():
                     contract_id=contract.id,
                     product_name=product_names[i].strip() or None,
                     contract_type=contract_types[i] if i < len(contract_types) else None,
+                    product_type=product_types[i].strip() if i < len(product_types) and product_types[i].strip() else None,
                     model=models[i].strip() if i < len(models) and models[i].strip() else None,
                     unit=units[i].strip() if i < len(units) and units[i].strip() else None,
                     quantity=float(quantities[i]) if i < len(quantities) and quantities[i] else None,
@@ -1291,6 +1340,8 @@ def edit_contract(id):
     if request.method == 'POST':
         contract.customer_name = request.form['customer_name']
         contract.project_name = request.form['project_name']
+        contract.contract_number = request.form.get('contract_number')
+        contract.contract_type = request.form.get('contract_type')
         contract.total_price = float(request.form['total_price'])
         contract.project_staff = request.form.get('project_staff')
         contract.sales_staff = request.form.get('sales_staff')
@@ -1310,6 +1361,7 @@ def edit_contract(id):
 
         product_names = request.form.getlist('products[product_name][]')
         contract_types = request.form.getlist('products[contract_type][]')
+        product_types = request.form.getlist('products[product_type][]')
         models = request.form.getlist('products[model][]')
         units = request.form.getlist('products[unit][]')
         quantities = request.form.getlist('products[quantity][]')
@@ -1323,6 +1375,7 @@ def edit_contract(id):
                     contract_id=contract.id,
                     product_name=product_names[i].strip() or None,
                     contract_type=contract_types[i] if i < len(contract_types) else None,
+                    product_type=product_types[i].strip() if i < len(product_types) and product_types[i].strip() else None,
                     model=models[i].strip() if i < len(models) and models[i].strip() else None,
                     unit=units[i].strip() if i < len(units) and units[i].strip() else None,
                     quantity=float(quantities[i]) if i < len(quantities) and quantities[i] else None,

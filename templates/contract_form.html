@@ -4,6 +4,21 @@
 <form method="POST" enctype="multipart/form-data">
     <div class="form-row">
         <div class="form-group">
+            <label>合同编号</label>
+            <input type="text" name="contract_number" value="{{ contract.contract_number if contract else '' }}" placeholder="合同唯一标识">
+        </div>
+        <div class="form-group">
+            <label>合同类型</label>
+            <select name="contract_type">
+                <option value="">请选择</option>
+                <option value="工程" {% if contract and contract.contract_type == '工程' %}selected{% endif %}>工程</option>
+                <option value="货物" {% if contract and contract.contract_type == '货物' %}selected{% endif %}>货物</option>
+                <option value="服务" {% if contract and contract.contract_type == '服务' %}selected{% endif %}>服务</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
             <label>客户名称*</label>
             <input type="text" name="customer_name" id="customerName" value="{{ contract.customer_name if contract else '' }}" required autocomplete="off">
             <div id="customerSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto;"></div>
@@ -29,13 +44,8 @@
                         <small style="color:#888;">可从<a href="{{ url_for('products') }}" target="_blank">产品管理</a>中选择</small>
                     </div>
                     <div class="form-group">
-                        <label>合同类型</label>
-                        <select name="products[contract_type][]">
-                            <option value="">请选择</option>
-                            <option value="工程" {% if cp.contract_type == '工程' %}selected{% endif %}>工程</option>
-                            <option value="货物" {% if cp.contract_type == '货物' %}selected{% endif %}>货物</option>
-                            <option value="服务" {% if cp.contract_type == '服务' %}selected{% endif %}>服务</option>
-                        </select>
+                        <label>产品类型</label>
+                        <input type="text" name="products[product_type][]" class="product-type-input" value="{{ cp.product_type or '' }}">
                     </div>
                 </div>
                 <div class="form-row">
@@ -79,13 +89,8 @@
                         <input type="text" name="products[product_name][]" class="product-name-input" value="{{ contract.product_name if contract else '' }}" autocomplete="off">
                     </div>
                     <div class="form-group">
-                        <label>合同类型</label>
-                        <select name="products[contract_type][]">
-                            <option value="">请选择</option>
-                            <option value="工程" {% if contract and contract.contract_type == '工程' %}selected{% endif %}>工程</option>
-                            <option value="货物" {% if contract and contract.contract_type == '货物' %}selected{% endif %}>货物</option>
-                            <option value="服务" {% if contract and contract.contract_type == '服务' %}selected{% endif %}>服务</option>
-                        </select>
+                        <label>产品类型</label>
+                        <input type="text" name="products[product_type][]" class="product-type-input" value="">
                     </div>
                 </div>
                 <div class="form-row">
@@ -246,13 +251,8 @@
                         <small style="color:#888;">输入搜索，未找到可<a href="/products" target="_blank">去产品管理添加</a></small>
                     </div>
                     <div class="form-group">
-                        <label>合同类型</label>
-                        <select name="products[contract_type][]">
-                            <option value="">请选择</option>
-                            <option value="工程">工程</option>
-                            <option value="货物">货物</option>
-                            <option value="服务">服务</option>
-                        </select>
+                        <label>产品类型</label>
+                        <input type="text" name="products[product_type][]" class="product-type-input">
                     </div>
                 </div>
                 <div class="form-row">

@@ -91,11 +91,13 @@ class ContractProduct(db.Model):
     tax_rate = db.Column(db.Float)
     # 新增：每个产品可以有自己的合同类型
     contract_type = db.Column(db.String(50))  # 工程/货物/服务
+    product_type = db.Column(db.String(100))  # 新增：产品类型
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Contract(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    contract_number = db.Column(db.String(100))  # 新增：合同编号
     customer_name = db.Column(db.String(200), nullable=False)
     project_name = db.Column(db.String(200), nullable=False)
     # 保留原有字段用于兼容，但主要使用 ContractProduct

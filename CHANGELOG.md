@@ -1,5 +1,37 @@
 # 合同管理系统 - 更新日志
 
+## v2.2 (2026-04-15)
+
+### 新增功能
+
+#### 1. 合同编号
+- 新建/编辑合同第一行新增"合同编号"输入框，作为合同唯一标识
+- 新增字段：`Contract.contract_number`
+- 合同列表导出 Excel 第一列为"合同编号"
+
+#### 2. 合同类型移至合同级别
+- "合同类型"从产品信息移至第一行（合同级别），与合同编号并排
+- 新建/编辑合同时统一在合同头部选择合同类型
+
+#### 3. 产品类型
+- 产品信息中新增"产品类型"文本输入框（替代原产品级合同类型）
+- 新增字段：`ContractProduct.product_type`
+
+#### 4. 统计分析导出格式选择
+- 导出弹窗新增三种格式选项：
+  - 方案A：一个 sheet，各维度纵向排列
+  - 方案B：一个 sheet，各维度横向并排（每维度占3列）
+  - 方案C：多个 sheet，每个维度单独一个 sheet
+- 按履约状态统计新增"合同总额"列，与其他维度统一
+
+### 修改文件
+- `models.py`：`Contract` 新增 `contract_number`；`ContractProduct` 新增 `product_type`
+- `templates/contract_form.html`：新增合同编号、合同类型移位、产品类型字段
+- `templates/statistics.html`：导出弹窗新增格式选择；按履约状态表格新增合同总额列
+- `app.py`：`new_contract`/`edit_contract` 读取新字段；`export_contracts` 列顺序加合同编号；`export_statistics` 支持三种导出格式
+
+
+
 ## v2.1 (2026-04-14)
 
 ### 🎉 新增功能

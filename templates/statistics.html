@@ -16,6 +16,21 @@
         <label style="display:block;margin-bottom:8px;"><input type="checkbox" id="exp_business" checked> 按业务类型统计</label>
         <label style="display:block;margin-bottom:8px;"><input type="checkbox" id="exp_status" checked> 按履约状态统计</label>
     </div>
+    <div style="margin-bottom:15px;">
+        <div style="font-weight:bold;margin-bottom:8px;">导出格式：</div>
+        <label style="display:block;margin-bottom:6px;">
+            <input type="radio" name="exp_layout" value="vertical" checked>
+            方案A：纵向排列（各维度依次排列在同一列）
+        </label>
+        <label style="display:block;margin-bottom:6px;">
+            <input type="radio" name="exp_layout" value="horizontal">
+            方案B：横向排列（各维度并排，每维度占三列）
+        </label>
+        <label style="display:block;margin-bottom:6px;">
+            <input type="radio" name="exp_layout" value="multisheet">
+            方案C：多sheet（每个维度单独一个sheet）
+        </label>
+    </div>
     <div id="exportingTip" style="display:none;color:#888;font-size:13px;margin-bottom:10px;">⏳ 正在生成，文件将自动下载...</div>
     <button onclick="doExport()" class="btn btn-success">确认导出</button>
     <button onclick="document.getElementById('exportDialog').style.display='none'" class="btn btn-secondary">取消</button>
@@ -40,12 +55,14 @@ function doExport() {
     if (document.getElementById('exp_business').checked) sheets.push('business');
     if (document.getElementById('exp_status').checked) sheets.push('status');
     if (sheets.length === 0) { alert('请至少选择一项'); return; }
+    var layout = document.querySelector('input[name="exp_layout"]:checked').value;
     document.getElementById('exportingTip').style.display = 'block';
 
     var url = "{{ url_for('export_statistics') }}";
     var params = new URLSearchParams(window.location.search);
     params.delete('sheets');
     params.set('sheets', sheets.join(','));
+    params.set('layout', layout);
     url += '?' + params.toString();
 
     var a = document.createElement('a');
@@ -287,13 +304,15 @@ document.querySelector('form').addEventListener('submit', function(e) {
         <tr>
             <th>状态</th>
             <th>合同数量</th>
+            <th>合同总额</th>
         </tr>
     </thead>
     <tbody>
-        {% for status, count in stats.by_status %}
+        {% for status, count, total in stats.by_status %}
         <tr>
             <td>{{ status }}</td>
             <td>{{ count }}</td>
+            <td>¥{{ "%.2f"|format(total or 0) }}</td>
         </tr>
         {% endfor %}
     </tbody>
