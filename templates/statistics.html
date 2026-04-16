@@ -15,6 +15,7 @@
         <label style="display:block;margin-bottom:8px;"><input type="checkbox" id="exp_type" checked> 按合同类型统计</label>
         <label style="display:block;margin-bottom:8px;"><input type="checkbox" id="exp_business" checked> 按业务类型统计</label>
         <label style="display:block;margin-bottom:8px;"><input type="checkbox" id="exp_status" checked> 按履约状态统计</label>
+        <label style="display:block;margin-bottom:8px;"><input type="checkbox" id="exp_detail" checked> 明细数据（16列）</label>
     </div>
     <div style="margin-bottom:15px;">
         <div style="font-weight:bold;margin-bottom:8px;">导出格式：</div>
@@ -54,6 +55,7 @@ function doExport() {
     if (document.getElementById('exp_type').checked) sheets.push('type');
     if (document.getElementById('exp_business').checked) sheets.push('business');
     if (document.getElementById('exp_status').checked) sheets.push('status');
+    if (document.getElementById('exp_detail').checked) sheets.push('detail');
     if (sheets.length === 0) { alert('请至少选择一项'); return; }
     var layout = document.querySelector('input[name="exp_layout"]:checked').value;
     document.getElementById('exportingTip').style.display = 'block';
@@ -146,6 +148,9 @@ function doExport() {
             </label>
             <label style="margin-right:12px;font-weight:normal;">
                 <input type="checkbox" name="f_sheets" value="status" {% if 'status' in selected_sheets %}checked{% endif %}> 按履约状态
+            </label>
+            <label style="margin-right:12px;font-weight:normal;">
+                <input type="checkbox" name="f_sheets" value="detail" {% if 'detail' in selected_sheets %}checked{% endif %}> 明细数据
             </label>
         </div>
     </div>
@@ -317,5 +322,67 @@ document.querySelector('form').addEventListener('submit', function(e) {
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
+
+{% if 'detail' in selected_sheets and detail_contracts %}
+<h3>明细数据</h3>
+<div style="overflow-x:auto;">
+<table style="font-size:12px;white-space:nowrap;">
+    <thead>
+        <tr>
+            <th>合同编号</th><th>客户名称</th><th>项目名称</th><th>产品名称</th>
+            <th>合同总价</th><th>发票税率</th><th>合同类型</th><th>业务类型</th>
+            <th>项目负责人</th><th>销售人员</th><th>签订日期</th><th>状态</th>
+            <th>已收付款</th><th>未收付款</th><th>已开票</th><th>未开票</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in detail_contracts %}
+        {% set products = c.products %}
+        {% if products %}
+            {% for cp in products %}
+            <tr>
+                <td>{{ c.contract_number or '-' }}</td>
+                <td>{{ c.customer_name }}</td>
+                <td>{{ c.project_name }}</td>
+                <td>{{ cp.product_name or '-' }}</td>
+                <td>¥{{ "%.2f"|format(c.total_price) }}</td>
+                <td>{{ cp.tax_rate|notrailzero }}{% if cp.tax_rate %}%{% endif %}</td>
+                <td>{{ c.contract_type or cp.contract_type or '-' }}</td>
+                <td>{{ c.business_type or '-' }}</td>
+                <td>{{ c.project_staff or '-' }}</td>
+                <td>{{ c.sales_staff or '-' }}</td>
+                <td>{{ c.signing_date or '-' }}</td>
+                <td>{{ c.status }}</td>
+                <td>¥{{ "%.2f"|format(c.get_total_paid()) }}</td>
+                <td>¥{{ "%.2f"|format(c.get_unpaid_amount()) }}</td>
+                <td>¥{{ "%.2f"|format(c.get_total_invoiced()) }}</td>
+                <td>¥{{ "%.2f"|format(c.get_uninvoiced_amount()) }}</td>
+            </tr>
+            {% endfor %}
+        {% else %}
+        <tr>
+            <td>{{ c.contract_number or '-' }}</td>
+            <td>{{ c.customer_name }}</td>
+            <td>{{ c.project_name }}</td>
+            <td>{{ c.product_name or '-' }}</td>
+            <td>¥{{ "%.2f"|format(c.total_price) }}</td>
+            <td>{{ c.tax_rate|notrailzero }}{% if c.tax_rate %}%{% endif %}</td>
+            <td>{{ c.contract_type or '-' }}</td>
+            <td>{{ c.business_type or '-' }}</td>
+            <td>{{ c.project_staff or '-' }}</td>
+            <td>{{ c.sales_staff or '-' }}</td>
+            <td>{{ c.signing_date or '-' }}</td>
+            <td>{{ c.status }}</td>
+            <td>¥{{ "%.2f"|format(c.get_total_paid()) }}</td>
+            <td>¥{{ "%.2f"|format(c.get_unpaid_amount()) }}</td>
+            <td>¥{{ "%.2f"|format(c.get_total_invoiced()) }}</td>
+            <td>¥{{ "%.2f"|format(c.get_uninvoiced_amount()) }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+    </tbody>
+</table>
+</div>
 {% endif %}
 {% endblock %}

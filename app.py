@@ -284,8 +284,10 @@ def index():
         'total_uninvoiced': sum(c.get_uninvoiced_amount() for c in contracts),
     }
 
+    is_tenant_user = get_current_customer_id() is not None
     return render_template('index.html', contracts=contracts, alerts=alerts,
-                           available_years=available_years, stats=stats)
+                           available_years=available_years, stats=stats,
+                           is_tenant_user=is_tenant_user)
 
 
 # ── 新增：合同列表导出 Excel ──
@@ -1093,7 +1095,7 @@ def statistics():
     # 新增：f_sheets 参数——控制页面上显示哪些维度的统计表格
     # 默认全部显示；用户勾选后只显示选中的
     # 注意：表单 checkbox 以多值形式发送（f_sheets=staff&f_sheets=customer），用 getlist 读取
-    all_sheets = ['staff', 'customer', 'type', 'business', 'status']
+    all_sheets = ['staff', 'customer', 'type', 'business', 'status', 'detail']
     selected_sheets = [s for s in request.args.getlist('f_sheets') if s in all_sheets]
     if not selected_sheets:
         selected_sheets = all_sheets  # 默认全部
@@ -1109,6 +1111,10 @@ def statistics():
         stats['by_status'] = q.with_entities(Contract.status, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.status).all()
     if 'business' in selected_sheets:
         stats['by_business'] = q.with_entities(Contract.business_type, func.count(Contract.id), func.sum(Contract.total_price)).group_by(Contract.business_type).all()
+    # 新增：明细数据
+    detail_contracts = []
+    if 'detail' in selected_sheets:
+        detail_contracts = q.order_by(Contract.signing_date.desc()).all()
 
     filters = {'f_staff': f_staff, 'f_customer': f_customer, 'f_type': f_type,
                'f_business': f_business, 'f_status': f_status, 'f_year': f_year}
@@ -1120,7 +1126,8 @@ def statistics():
     available_years = [int(y[0]) for y in years_raw if y[0]]
 
     return render_template('statistics.html', stats=stats, filters=filters,
-                           available_years=available_years, selected_sheets=selected_sheets)
+                           available_years=available_years, selected_sheets=selected_sheets,
+                           detail_contracts=detail_contracts)
 
 
 # ── 新增：统计分析导出 Excel ──
@@ -1156,6 +1163,34 @@ def export_statistics():
     # 按勾选的sheets参数决定导出哪些sheet
     sheets = request.args.get('sheets', 'staff,customer,type,business,status').split(',')
     layout = request.args.get('layout', 'vertical')  # vertical 或 horizontal
+
+    # 新增：明细数据导出
+    detail_rows = []
+    if 'detail' in sheets:
+        detail_contracts = q.order_by(Contract.signing_date.desc()).all()
+        for c in detail_contracts:
+            products = ContractProduct.query.filter_by(contract_id=c.id).all()
+            if products:
+                for cp in products:
+                    detail_rows.append([
+                        c.contract_number or '', c.customer_name, c.project_name,
+                        cp.product_name or '', c.total_price, cp.tax_rate,
+                        c.contract_type or (cp.contract_type or ''), c.business_type or '',
+                        c.project_staff or '', c.sales_staff or '',
+                        str(c.signing_date) if c.signing_date else '', c.status or '',
+                        c.get_total_paid(), c.get_unpaid_amount(),
+                        c.get_total_invoiced(), c.get_uninvoiced_amount(),
+                    ])
+            else:
+                detail_rows.append([
+                    c.contract_number or '', c.customer_name, c.project_name,
+                    c.product_name or '', c.total_price, c.tax_rate,
+                    c.contract_type or '', c.business_type or '',
+                    c.project_staff or '', c.sales_staff or '',
+                    str(c.signing_date) if c.signing_date else '', c.status or '',
+                    c.get_total_paid(), c.get_unpaid_amount(),
+                    c.get_total_invoiced(), c.get_uninvoiced_amount(),
+                ])
 
     # 收集各维度数据
     blocks = []  # [(col_name, data), ...]
@@ -1219,6 +1254,27 @@ def export_statistics():
 
     wb.save(buf)
     buf.seek(0)
+    # 新增：如有明细数据，写入明细sheet
+    if detail_rows:
+        import openpyxl as _opx
+        buf2 = io.BytesIO()
+        buf.seek(0)
+        wb2 = _opx.load_workbook(buf)
+        ws_detail = wb2.create_sheet(title='明细数据')
+        detail_headers = ['合同编号','客户名称','项目名称','产品名称','合同总价','发票税率',
+                          '合同类型','业务类型','项目负责人','销售人员','签订日期','状态',
+                          '已收付款','未收付款','已开票','未开票']
+        for ci, h in enumerate(detail_headers, 1):
+            ws_detail.cell(row=1, column=ci, value=h)
+        for ri, row in enumerate(detail_rows, 2):
+            for ci, val in enumerate(row, 1):
+                ws_detail.cell(row=ri, column=ci, value=val)
+        wb2.save(buf2)
+        buf2.seek(0)
+        filename = f"统计导出_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+        return send_file(buf2, download_name=filename, as_attachment=True,
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    buf.seek(0)
     filename = f"统计导出_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
     return send_file(buf, download_name=filename, as_attachment=True,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -1243,7 +1299,8 @@ def new_contract():
             sales_staff=request.form.get('sales_staff'),
             business_type=request.form.get('business_type', '销售'),
             signing_date=datetime.strptime(request.form['signing_date'], '%Y-%m-%d').date() if request.form.get('signing_date') else None,
-            customer_id=customer_id  # 新增：关联租户
+            customer_id=customer_id,  # 新增：关联租户
+            created_by=session.get('username')  # 新增：记录创建人
         )
 
         # 处理合同文件上传
@@ -1485,6 +1542,48 @@ def add_invoice(id):
         db.session.commit()
     flash('发票记录添加成功', 'success')
     return redirect(url_for('view_contract', id=id))
+
+
+@app.route('/payment/<int:pid>/delete_file', methods=['POST'])
+@login_required
+def delete_payment_file(pid):
+    payment = Payment.query.get_or_404(pid)
+    if payment.receipt_file:
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], payment.receipt_file))
+        except Exception:
+            pass
+        payment.receipt_file = None
+        db.session.commit()
+    return redirect(url_for('view_contract', id=payment.contract_id))
+
+
+@app.route('/delivery/<int:did>/delete_file', methods=['POST'])
+@login_required
+def delete_delivery_file(did):
+    delivery = Delivery.query.get_or_404(did)
+    if delivery.delivery_file:
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], delivery.delivery_file))
+        except Exception:
+            pass
+        delivery.delivery_file = None
+        db.session.commit()
+    return redirect(url_for('view_contract', id=delivery.contract_id))
+
+
+@app.route('/invoice/<int:iid>/delete_file', methods=['POST'])
+@login_required
+def delete_invoice_file(iid):
+    invoice = Invoice.query.get_or_404(iid)
+    if invoice.invoice_file:
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], invoice.invoice_file))
+        except Exception:
+            pass
+        invoice.invoice_file = None
+        db.session.commit()
+    return redirect(url_for('view_contract', id=invoice.contract_id))
 
 
 @app.route('/import', methods=['GET', 'POST'])

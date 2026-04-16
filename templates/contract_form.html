@@ -36,7 +36,7 @@
         {% if contract and contract.products %}
             {% for cp in contract.products %}
             <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
-                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; display:none;">删除</button>
                 <div class="form-row">
                     <div class="form-group">
                         <label>产品名称</label>
@@ -45,7 +45,13 @@
                     </div>
                     <div class="form-group">
                         <label>产品类型</label>
-                        <input type="text" name="products[product_type][]" class="product-type-input" value="{{ cp.product_type or '' }}">
+                        <select name="products[product_type][]" class="product-type-input">
+                            <option value="">请选择</option>
+                            <option value="硬件设备" {% if cp.product_type == '硬件设备' %}selected{% endif %}>硬件设备</option>
+                            <option value="软件" {% if cp.product_type == '软件' %}selected{% endif %}>软件</option>
+                            <option value="技术服务" {% if cp.product_type == '技术服务' %}selected{% endif %}>技术服务</option>
+                            <option value="技术开发" {% if cp.product_type == '技术开发' %}selected{% endif %}>技术开发</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
@@ -82,7 +88,7 @@
             {% endfor %}
         {% else %}
             <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
-                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; display:none;">删除</button>
                 <div class="form-row">
                     <div class="form-group">
                         <label>产品名称</label>
@@ -90,7 +96,13 @@
                     </div>
                     <div class="form-group">
                         <label>产品类型</label>
-                        <input type="text" name="products[product_type][]" class="product-type-input" value="">
+                        <select name="products[product_type][]" class="product-type-input">
+                            <option value="">请选择</option>
+                            <option value="硬件设备">硬件设备</option>
+                            <option value="软件">软件</option>
+                            <option value="技术服务">技术服务</option>
+                            <option value="技术开发">技术开发</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
@@ -216,14 +228,32 @@
                                 (p.unit||'').replace(/'/g,"&#39;") + '\')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
                             ).join('');
                         } else {
-                            suggestBox.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配产品，可<a href="/products" target="_blank">去产品管理添加</a>后刷新，或直接输入新名称</div>';
+                            suggestBox.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配产品 &nbsp;<a href="/products" target="_blank" style="color:#007bff;font-weight:bold;" onclick="input._productJumped=true;">去产品管理添加 ↗</a></div>';
+                            suggestBox.style.display = 'block';
                         }
-                        suggestBox.style.display = 'block';
                     });
             }, 300);
         });
         document.addEventListener('click', function(e) {
             if (!input.contains(e.target)) suggestBox.style.display = 'none';
+        });
+        // 从产品管理页返回后自动重新搜索并展示下拉
+        window.addEventListener('focus', function() {
+            if (input._productJumped && input.value.length > 0) {
+                input._productJumped = false;
+                fetch('/api/products/search?q=' + encodeURIComponent(input.value))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            suggestBox.innerHTML = data.map(p =>
+                                '<div style="padding:8px;cursor:pointer;" onclick="selectProduct(this,\'' +
+                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
+                                (p.unit||'').replace(/'/g,"&#39;") + '\')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
+                            ).join('');
+                            suggestBox.style.display = 'block';
+                        }
+                    });
+            }
         });
     }
 
@@ -243,7 +273,7 @@
         const container = document.getElementById('productsContainer');
         const template = `
             <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
-                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; display:none;">删除</button>
                 <div class="form-row">
                     <div class="form-group" style="position:relative;">
                         <label>产品名称</label>
@@ -252,7 +282,13 @@
                     </div>
                     <div class="form-group">
                         <label>产品类型</label>
-                        <input type="text" name="products[product_type][]" class="product-type-input">
+                        <select name="products[product_type][]" class="product-type-input">
+                            <option value="">请选择</option>
+                            <option value="硬件设备">硬件设备</option>
+                            <option value="软件">软件</option>
+                            <option value="技术服务">技术服务</option>
+                            <option value="技术开发">技术开发</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
@@ -357,7 +393,7 @@
                         ).join('');
                         customerSuggestions.style.display = 'block';
                     } else {
-                        customerSuggestions.innerHTML = '<div style="padding:8px; color:#888;">未找到匹配客户，可<a href="/customers" target="_blank">去客户管理添加</a>后刷新，或直接输入新名称（将自动同步）</div>';
+                        customerSuggestions.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配客户 &nbsp;<a href="/customers" target="_blank" style="color:#007bff;font-weight:bold;" onclick="window._customerJumped=true;">去客户管理添加 ↗</a></div>';
                         customerSuggestions.style.display = 'block';
                     }
                 });
@@ -368,6 +404,23 @@
         customerInput.value = name;
         customerSuggestions.style.display = 'none';
     }
+
+    // 新增：从客户管理页返回后自动重新搜索
+    window.addEventListener('focus', function() {
+        if (window._customerJumped && customerInput.value.length > 0) {
+            window._customerJumped = false;
+            fetch('/api/customers/search?q=' + encodeURIComponent(customerInput.value))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        customerSuggestions.innerHTML = data.map(c =>
+                            '<div style="padding:8px; cursor:pointer;" onclick="selectCustomer(\'' + c.name.replace(/'/g,"&#39;") + '\')">' + c.name + (c.province ? ' (' + c.province + ')' : '') + '</div>'
+                        ).join('');
+                        customerSuggestions.style.display = 'block';
+                    }
+                });
+        }
+    });
 
     document.addEventListener('click', function(e) {
         if (!customerInput.contains(e.target)) customerSuggestions.style.display = 'none';

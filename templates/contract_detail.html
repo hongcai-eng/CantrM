@@ -9,16 +9,19 @@
 
 <h3>基础信息</h3>
 <table>
-    <tr><th>客户名称</th><td>{{ contract.customer_name }}</td></tr>
+    <tr><th>合同编号</th><td>{{ contract.contract_number or '-' }}</td></tr>
     <tr><th>项目名称</th><td>{{ contract.project_name }}</td></tr>
-    <tr><th>合同签订日期</th><td>{{ contract.signing_date if contract.signing_date else '未填写' }}</td></tr>
-    <tr><th>合同总价</th><td>¥{{ "%.2f"|format(contract.total_price) }}</td></tr>
-    <tr><th>已付款</th><td>¥{{ "%.2f"|format(contract.get_total_paid()) }}</td></tr>
-    <tr><th>未付款</th><td style="color:red; font-weight:bold;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td></tr>
-    <tr><th>业务类型</th><td>{{ contract.business_type }}</td></tr>
+    <tr><th>客户名称</th><td>{{ contract.customer_name }}</td></tr>
     <tr><th>项目负责人</th><td>{{ contract.project_staff }}</td></tr>
-    <tr><th>销售人员</th><td>{{ contract.sales_staff }}</td></tr>
+    <tr><th>签订日期</th><td>{{ contract.signing_date if contract.signing_date else '未填写' }}</td></tr>
+    <tr><th>合同总价</th><td>¥{{ "%.2f"|format(contract.total_price) }}</td></tr>
+    <tr><th>未付款</th><td style="color:red; font-weight:bold;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td></tr>
+    <tr><th>未开票</th><td style="color:orange; font-weight:bold;">¥{{ "%.2f"|format(contract.get_uninvoiced_amount()) }}</td></tr>
+    <tr><th>合同类型</th><td>{{ contract.products | map(attribute='contract_type') | select | unique | join('/') or contract.contract_type or '-' }}</td></tr>
+    <tr><th>业务类型</th><td>{{ contract.business_type }}</td></tr>
     <tr><th>状态</th><td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td></tr>
+    <tr><th>已付款</th><td>¥{{ "%.2f"|format(contract.get_total_paid()) }}</td></tr>
+    <tr><th>销售人员</th><td>{{ contract.sales_staff }}</td></tr>
     <tr><th>合同文件</th><td>
         {% if contract.file_path %}
         <a href="{{ url_for('preview_file', filename=contract.file_path) }}" target="_blank">预览</a> |
@@ -112,7 +115,10 @@
             <td>
                 {% if payment.receipt_file %}
                 <a href="{{ url_for('preview_file', filename=payment.receipt_file) }}" target="_blank">预览</a> |
-                <a href="{{ url_for('download_file', filename=payment.receipt_file) }}">下载</a>
+                <a href="{{ url_for('download_file', filename=payment.receipt_file) }}">下载</a> |
+                <form method="POST" action="{{ url_for('delete_payment_file', pid=payment.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该回单文件？')">删除</button>
+                </form>
                 {% endif %}
             </td>
         </tr>
@@ -154,7 +160,10 @@
             <td>
                 {% if delivery.delivery_file %}
                 <a href="{{ url_for('preview_file', filename=delivery.delivery_file) }}" target="_blank">预览</a> |
-                <a href="{{ url_for('download_file', filename=delivery.delivery_file) }}">下载</a>
+                <a href="{{ url_for('download_file', filename=delivery.delivery_file) }}">下载</a> |
+                <form method="POST" action="{{ url_for('delete_delivery_file', did=delivery.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该交付文件？')">删除</button>
+                </form>
                 {% endif %}
             </td>
         </tr>
@@ -223,7 +232,10 @@
             <td>
                 {% if invoice.invoice_file %}
                 <a href="{{ url_for('preview_file', filename=invoice.invoice_file) }}" target="_blank">预览</a> |
-                <a href="{{ url_for('download_file', filename=invoice.invoice_file) }}">下载</a>
+                <a href="{{ url_for('download_file', filename=invoice.invoice_file) }}">下载</a> |
+                <form method="POST" action="{{ url_for('delete_invoice_file', iid=invoice.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该发票文件？')">删除</button>
+                </form>
                 {% endif %}
             </td>
         </tr>

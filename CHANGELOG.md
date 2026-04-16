@@ -1,5 +1,101 @@
 # 合同管理系统 - 更新日志
 
+## v2.4 (2026-04-16)
+
+### 新增功能
+
+#### 1. 收付款回单文件删除
+- 合同详情"收付款记录"表格回单列新增"删除"按钮
+- 删除前弹窗确认，删除后同步清除磁盘文件和数据库字段
+- 新增路由：`POST /payment/<pid>/delete_file`
+
+#### 2. 交付记录文件删除
+- 合同详情"交付记录"表格文件列新增"删除"按钮
+- 新增路由：`POST /delivery/<did>/delete_file`
+
+#### 3. 发票文件删除
+- 合同详情"发票记录"表格发票文件列新增"删除"按钮
+- 新增路由：`POST /invoice/<iid>/delete_file`
+
+#### 4. 客户/产品名称未找到时直接跳转
+- 新建合同"客户名称"搜索无结果时，下拉显示"去客户管理添加 ↗"链接，点击在新标签页打开客户管理，返回后自动重搜并展示下拉供选择
+- 新建合同"产品名称"搜索无结果时，同样逻辑跳转到产品管理页
+
+### 修改文件
+- `app.py`：新增 `delete_payment_file`、`delete_delivery_file`、`delete_invoice_file` 三个路由
+- `templates/contract_detail.html`：收付款/交付/发票三处文件列新增删除按钮
+- `templates/contract_form.html`：客户/产品搜索无结果时改为显示跳转链接（替代原 `window.open` 方案，规避浏览器弹窗拦截）
+
+---
+
+## v2.3 (2026-04-16)
+
+### 新增功能
+
+#### F1. 合同列表新增合同编号列 + 响应式布局
+- 合同列表表格首列新增"合同编号"，展示 `contract.contract_number`
+- 表格包裹 `overflow-x:auto` 滚动容器，字体缩小至 13px，`white-space:nowrap` 确保单行显示
+- **修改文件**：`templates/index.html`
+
+#### F2. 合同详情基础信息字段顺序调整
+- "基础信息"表格按需求重排为：合同编号、项目名称、客户名称、项目负责人、签订日期、合同总价、未付款、未开票、合同类型、业务类型、状态
+- 保留原有字段：已付款、销售人员、合同文件
+- **修改文件**：`templates/contract_detail.html`
+
+#### F3. 产品类型改为下拉选择
+- 新建/编辑合同的产品明细中，"产品类型"由文本输入框改为下拉选择
+- 选项：硬件设备 / 软件 / 技术服务 / 技术开发（与产品管理页一致）
+- 覆盖三处：现有产品循环、默认空产品块、`addProduct()` JS 模板字符串
+- **修改文件**：`templates/contract_form.html`
+
+#### F4. 产品删除按钮隐藏
+- 新建/编辑合同产品行的"删除"按钮设置 `display:none`（保留 DOM 结构，不删除逻辑）
+- 覆盖三处：现有产品循环、默认空产品块、`addProduct()` JS 模板字符串
+- **修改文件**：`templates/contract_form.html`
+
+#### F7. 客户名称未找到 → 跳转客户管理 → 返回自动重搜
+- 客户搜索无匹配时，提示文字含"点击去客户管理添加"链接（`target="_blank"`），点击设置 `window._customerJumped = true`
+- 窗口重新获得焦点时，若 `_customerJumped` 为真且输入框有值，自动重新搜索并展示下拉
+- **修改文件**：`templates/contract_form.html`
+
+#### F8. 产品名称未找到 → 跳转产品管理 → 返回自动重搜
+- 产品搜索无匹配时，提示文字含"点击去产品管理添加"链接（`target="_blank"`），点击设置 `input._productJumped = true`
+- 窗口重新获得焦点时，若对应产品输入框 `_productJumped` 为真且有值，自动重新搜索并展示下拉
+- **修改文件**：`templates/contract_form.html`
+
+#### F9. 租户账号合同列表新增"用户名"列
+- 租户用户登录时，合同列表最后一列显示"用户名"（`contract.created_by`），共 13 列
+- superadmin 等非租户账号不显示此列，保持原 12 列
+- 新增字段：`Contract.created_by`（记录创建合同的用户名）
+- 新建合同时自动记录 `session.get('username')` 到 `created_by`
+- **修改文件**：`models.py`、`migrate_db.py`（步骤13）、`app.py`、`templates/index.html`
+
+#### F10. 统计分析新增 16 列明细导出 + 页面展示
+- 导出弹窗新增"明细数据（16列）"勾选项
+- 导出 Excel 时，明细数据写入独立 sheet "明细数据"，16 列为：合同编号、客户名称、项目名称、产品名称、合同总价、发票税率、合同类型、业务类型、项目负责人、销售人员、签订日期、状态、已收付款、未收付款、已开票、未开票
+- 多产品合同按产品行展开，单产品合同单行展示
+- 统计页筛选表单新增"明细数据"维度勾选，页面同步显示 16 列明细表格（`overflow-x:auto`，12px 字体）
+- **修改文件**：`templates/statistics.html`、`app.py`
+
+### 数据库变更
+
+#### 新增字段
+- `contract.created_by VARCHAR(100)` — 记录创建合同的用户名（用于多租户合同归属显示）
+
+### 修改文件汇总
+- `models.py`：`Contract` 新增 `created_by` 字段
+- `migrate_db.py`：新增步骤13，为 `contract` 表添加 `created_by` 字段
+- `app.py`：`new_contract` 记录 `created_by`；`index` 传入 `is_tenant_user` 标志；`statistics` 新增 `detail` 维度及 `detail_contracts` 查询；`export_statistics` 新增明细 sheet 导出
+- `templates/index.html`：新增合同编号首列、响应式布局、租户账号用户名列
+- `templates/contract_detail.html`：基础信息字段顺序调整
+- `templates/contract_form.html`：产品类型改下拉、删除按钮隐藏、客户/产品跳转重搜逻辑
+- `templates/statistics.html`：新增明细导出勾选、明细页面表格
+
+### 升级说明
+- 需执行数据库迁移：`python migrate_db.py`（仅添加 `contract.created_by` 字段，已有数据不受影响）
+
+---
+
 ## v2.2 (2026-04-15)
 
 ### 新增功能

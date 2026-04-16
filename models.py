@@ -119,6 +119,8 @@ class Contract(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # 新增：所属租户客户ID
     customer_id = db.Column(db.Integer, db.ForeignKey('tenant_customer.id'), nullable=True)
+    # 新增：创建人用户名
+    created_by = db.Column(db.String(100))
 
     payments = db.relationship('Payment', backref='contract', lazy=True, cascade='all, delete-orphan')
     deliveries = db.relationship('Delivery', backref='contract', lazy=True, cascade='all, delete-orphan')

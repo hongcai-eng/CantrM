@@ -147,6 +147,36 @@ def migrate():
         else:
             print(f"[ERROR] user 表添加字段失败: {e}")
 
+    # 11. 为 contract 表添加 contract_number 字段
+    try:
+        cursor.execute("ALTER TABLE contract ADD COLUMN contract_number VARCHAR(100)")
+        print("[OK] contract 表添加 contract_number 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] contract.contract_number 字段已存在")
+        else:
+            print(f"[ERROR] contract 表添加字段失败: {e}")
+
+    # 12. 为 contract_product 表添加 product_type 字段
+    try:
+        cursor.execute("ALTER TABLE contract_product ADD COLUMN product_type VARCHAR(100)")
+        print("[OK] contract_product 表添加 product_type 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] contract_product.product_type 字段已存在")
+        else:
+            print(f"[ERROR] contract_product 表添加字段失败: {e}")
+
+    # 13. 为 contract 表添加 created_by 字段
+    try:
+        cursor.execute("ALTER TABLE contract ADD COLUMN created_by VARCHAR(100)")
+        print("[OK] contract 表添加 created_by 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] contract.created_by 字段已存在")
+        else:
+            print(f"[ERROR] contract 表添加字段失败: {e}")
+
     conn.commit()
     conn.close()
     print("\n数据库迁移完成！")

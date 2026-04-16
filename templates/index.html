@@ -195,9 +195,11 @@ document.addEventListener('click', function(e) {
     </div>
 </div>
 
-<table>
+<div style="overflow-x:auto;">
+<table style="font-size:13px;white-space:nowrap;">
     <thead>
         <tr>
+            <th>合同编号</th>
             <th>项目名称</th>
             <th>客户名称</th>
             <th>项目负责人</th>
@@ -209,11 +211,13 @@ document.addEventListener('click', function(e) {
             <th>业务类型</th>
             <th>状态</th>
             <th>操作</th>
+            {% if is_tenant_user %}<th>用户名</th>{% endif %}
         </tr>
     </thead>
     <tbody>
         {% for contract in contracts %}
         <tr>
+            <td>{{ contract.contract_number or '-' }}</td>
             <td>{{ contract.project_name }}</td>
             <td>{{ contract.customer_name }}</td>
             <td>{{ contract.project_staff or '-' }}</td>
@@ -230,8 +234,10 @@ document.addEventListener('click', function(e) {
                     <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该合同？此操作不可恢复！')">删除</button>
                 </form>
             </td>
+            {% if is_tenant_user %}<td>{{ contract.created_by or '-' }}</td>{% endif %}
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endblock %}
