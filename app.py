@@ -1029,9 +1029,10 @@ def auto_update_contract_status(contract):
     total_paid = contract.get_total_paid()
     total_invoiced = contract.get_total_invoiced()
     if contract.total_price > 0 and total_paid >= contract.total_price and total_invoiced >= contract.total_price:
-        if contract.status != '已完结':
-            contract.status = '已完结'
-    # 注意：不自动从"已完结"回退到"进行中"，避免误操作
+        contract.status = '已完结'
+    else:
+        if contract.status == '已完结':
+            contract.status = '进行中'
 
 
 # ── 新增：将合同中的产品名称同步到 Product 表（新产品则创建，已有则跳过）──
@@ -1445,6 +1446,8 @@ def edit_contract(id):
         # 新增：将产品名称同步到产品管理表（仅新产品）
         sync_products_to_table(product_names, models, units, tax_rates, customer_id)
 
+        db.session.flush()
+        auto_update_contract_status(contract)
         db.session.commit()
         flash('合同更新成功', 'success')
         return redirect(url_for('view_contract', id=id))
@@ -1544,6 +1547,26 @@ def add_invoice(id):
     return redirect(url_for('view_contract', id=id))
 
 
+@app.route('/payment/<int:pid>/delete', methods=['POST'])
+@login_required
+def delete_payment(pid):
+    payment = Payment.query.get_or_404(pid)
+    contract_id = payment.contract_id
+    if payment.receipt_file:
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], payment.receipt_file))
+        except Exception:
+            pass
+    db.session.delete(payment)
+    db.session.flush()
+    contract = Contract.query.get(contract_id)
+    if contract:
+        auto_update_contract_status(contract)
+    db.session.commit()
+    flash('收付款记录已删除', 'success')
+    return redirect(url_for('view_contract', id=contract_id))
+
+
 @app.route('/payment/<int:pid>/delete_file', methods=['POST'])
 @login_required
 def delete_payment_file(pid):
@@ -1558,6 +1581,22 @@ def delete_payment_file(pid):
     return redirect(url_for('view_contract', id=payment.contract_id))
 
 
+@app.route('/delivery/<int:did>/delete', methods=['POST'])
+@login_required
+def delete_delivery(did):
+    delivery = Delivery.query.get_or_404(did)
+    contract_id = delivery.contract_id
+    if delivery.delivery_file:
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], delivery.delivery_file))
+        except Exception:
+            pass
+    db.session.delete(delivery)
+    db.session.commit()
+    flash('交付记录已删除', 'success')
+    return redirect(url_for('view_contract', id=contract_id))
+
+
 @app.route('/delivery/<int:did>/delete_file', methods=['POST'])
 @login_required
 def delete_delivery_file(did):
@@ -1570,6 +1609,26 @@ def delete_delivery_file(did):
         delivery.delivery_file = None
         db.session.commit()
     return redirect(url_for('view_contract', id=delivery.contract_id))
+
+
+@app.route('/invoice/<int:iid>/delete', methods=['POST'])
+@login_required
+def delete_invoice(iid):
+    invoice = Invoice.query.get_or_404(iid)
+    contract_id = invoice.contract_id
+    if invoice.invoice_file:
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], invoice.invoice_file))
+        except Exception:
+            pass
+    db.session.delete(invoice)
+    db.session.flush()
+    contract = Contract.query.get(contract_id)
+    if contract:
+        auto_update_contract_status(contract)
+    db.session.commit()
+    flash('发票记录已删除', 'success')
+    return redirect(url_for('view_contract', id=contract_id))
 
 
 @app.route('/invoice/<int:iid>/delete_file', methods=['POST'])
@@ -1616,42 +1675,52 @@ def import_contracts():
             # 过滤全空行
             df = df[~(df['客户名称'].isna() & df['项目名称'].isna())]
 
-            # ── 修改：按 (客户名称, 项目名称) 分组，支持多产品同一合同 ──
+            # ── 按合同编号（若有）或(客户名称+项目名称)分组，支持多产品同一合同 ──
             from collections import OrderedDict
             contract_groups = OrderedDict()
             for idx, row in df.iterrows():
                 cname = str(row.get('客户名称', '')) if pd.notna(row.get('客户名称')) else ''
                 pname = str(row.get('项目名称', '')) if pd.notna(row.get('项目名称')) else ''
-                key = (cname, pname)
+                cnum = str(row.get('合同编号', '')) if pd.notna(row.get('合同编号', None)) else ''
+                key = cnum if cnum else (cname, pname)
                 if key not in contract_groups:
                     contract_groups[key] = []
                 contract_groups[key].append((idx, row))
 
-            # 重复导入检测：按合同级别（客户名称+项目名称+合同总价）去重
+            # 重复导入检测
             duplicates = []
-            for (cname, pname), rows in contract_groups.items():
-                # 取第一行的合同总价作为合同级别数据
+            for key, rows in contract_groups.items():
                 first_idx, first_row = rows[0]
+                cname = str(first_row.get('客户名称', '')) if pd.notna(first_row.get('客户名称')) else ''
+                pname = str(first_row.get('项目名称', '')) if pd.notna(first_row.get('项目名称')) else ''
+                cnum = str(first_row.get('合同编号', '')) if pd.notna(first_row.get('合同编号', None)) else ''
                 total_val = first_row.get('合同总价', 0)
                 total_val = float(total_val) if pd.notna(total_val) else 0
 
-                q = Contract.query.filter_by(customer_name=cname, project_name=pname, total_price=total_val)
+                if cnum:
+                    q = Contract.query.filter_by(contract_number=cnum)
+                else:
+                    q = Contract.query.filter_by(customer_name=cname, project_name=pname, total_price=total_val)
                 if customer_id is not None:
                     q = q.filter_by(customer_id=customer_id)
                 exists = q.first()
 
                 if exists:
-                    duplicates.append(f"{cname} / {pname} / ¥{total_val}（共{len(rows)}个产品）")
+                    label = cnum if cnum else f"{cname} / {pname}"
+                    duplicates.append(f"{label} / ¥{total_val}（共{len(rows)}个产品）")
 
             if duplicates:
                 return render_template('import.html', duplicates=duplicates)
 
             count = 0
             errors = []
-            for (cname, pname), rows in contract_groups.items():
+            for key, rows in contract_groups.items():
                 try:
                     # 取第一行作为合同级别数据
                     first_idx, first_row = rows[0]
+                    cname = str(first_row.get('客户名称', '')) if pd.notna(first_row.get('客户名称')) else ''
+                    pname = str(first_row.get('项目名称', '')) if pd.notna(first_row.get('项目名称')) else ''
+                    cnum = str(first_row.get('合同编号', '')) if pd.notna(first_row.get('合同编号', None)) else ''
                     total_val = first_row.get('合同总价', 0)
                     if pd.isna(total_val):
                         total_val = 0
@@ -1667,6 +1736,7 @@ def import_contracts():
 
                     # 创建合同主记录
                     contract = Contract(
+                        contract_number=cnum or None,
                         customer_name=cname or '未知客户',
                         project_name=pname or '未知项目',
                         total_price=float(total_val),

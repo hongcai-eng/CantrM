@@ -10,6 +10,7 @@
 <h3>基础信息</h3>
 <table>
     <tr><th>合同编号</th><td>{{ contract.contract_number or '-' }}</td></tr>
+    <tr><th>合同类型</th><td>{{ contract.products | map(attribute='contract_type') | select | unique | join('/') or contract.contract_type or '-' }}</td></tr>
     <tr><th>项目名称</th><td>{{ contract.project_name }}</td></tr>
     <tr><th>客户名称</th><td>{{ contract.customer_name }}</td></tr>
     <tr><th>项目负责人</th><td>{{ contract.project_staff }}</td></tr>
@@ -43,7 +44,7 @@
     <thead>
         <tr>
             <th>产品名称</th>
-            <th>合同类型</th>
+            <th>产品类型</th>
             <th>型号</th>
             <th>单位</th>
             <th>数量</th>
@@ -56,7 +57,7 @@
         {% for product in contract.products %}
         <tr>
             <td>{{ product.product_name }}</td>
-            <td>{{ product.contract_type }}</td>
+            <td>{{ product.product_type or '-' }}</td>
             <td>{{ product.model }}</td>
             <td>{{ product.unit }}</td>
             <td>{{ product.quantity|notrailzero }}</td>
@@ -104,7 +105,7 @@
     <button type="submit" class="btn btn-success">添加</button>
 </form>
 <table>
-    <thead><tr><th>日期</th><th>类型</th><th>金额</th><th>备注</th><th>回单</th></tr></thead>
+    <thead><tr><th>日期</th><th>类型</th><th>金额</th><th>备注</th><th>回单</th><th>操作</th></tr></thead>
     <tbody>
         {% for payment in contract.payments %}
         <tr>
@@ -120,6 +121,11 @@
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该回单文件？')">删除</button>
                 </form>
                 {% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_payment', pid=payment.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该条收付款记录？此操作不可恢复。')">删除记录</button>
+                </form>
             </td>
         </tr>
         {% endfor %}
@@ -150,7 +156,7 @@
     <button type="submit" class="btn btn-success">添加</button>
 </form>
 <table>
-    <thead><tr><th>日期</th><th>内容</th><th>备注</th><th>文件</th></tr></thead>
+    <thead><tr><th>日期</th><th>内容</th><th>备注</th><th>文件</th><th>操作</th></tr></thead>
     <tbody>
         {% for delivery in contract.deliveries %}
         <tr>
@@ -165,6 +171,11 @@
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该交付文件？')">删除</button>
                 </form>
                 {% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_delivery', did=delivery.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该条交付记录？此操作不可恢复。')">删除记录</button>
+                </form>
             </td>
         </tr>
         {% endfor %}
@@ -219,7 +230,7 @@
     <button type="submit" class="btn btn-success">添加</button>
 </form>
 <table>
-    <thead><tr><th>日期</th><th>发票号</th><th>金额</th><th>发票类型</th><th>开具状态</th><th>备注</th><th>发票文件</th></tr></thead>
+    <thead><tr><th>日期</th><th>发票号</th><th>金额</th><th>发票类型</th><th>开具状态</th><th>备注</th><th>发票文件</th><th>操作</th></tr></thead>
     <tbody>
         {% for invoice in contract.invoices %}
         <tr>
@@ -237,6 +248,11 @@
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该发票文件？')">删除</button>
                 </form>
                 {% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_invoice', iid=invoice.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该条发票记录？此操作不可恢复。')">删除记录</button>
+                </form>
             </td>
         </tr>
         {% endfor %}
