@@ -45,6 +45,7 @@ class Organization(db.Model):
     description = db.Column(db.String(500))
     parent_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('tenant_customer.id'), nullable=False)
+    permissions = db.Column(db.String(500))  # 新增：组织权限（增加,删除,修改,查阅,上传,下载）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # 关联
     children = db.relationship('Organization', backref=db.backref('parent', remote_side=[id]), lazy=True)

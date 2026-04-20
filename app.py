@@ -323,65 +323,69 @@ def export_contracts():
 
     contracts = query.order_by(Contract.created_at.desc()).all()
 
-    data = []
-    for c in contracts:
-        products = ContractProduct.query.filter_by(contract_id=c.id).all()
-        if products:
-            for cp in products:
-                data.append({
-                    '合同编号': c.contract_number or '',
-                    '客户名称': c.customer_name,
-                    '项目名称': c.project_name,
-                    '产品名称': cp.product_name or '',
-                    '型号': cp.model or '',
-                    '单位': cp.unit or '',
-                    '数量': cp.quantity,
-                    '单价': cp.unit_price,
-                    '合同总价': c.total_price,
-                    '发票税率': cp.tax_rate,
-                    '合同类型': c.contract_type or '',
-                    '业务类型': c.business_type or '',
-                    '项目负责人': c.project_staff or '',
-                    '销售人员': c.sales_staff or '',
-                    '签订日期': str(c.signing_date) if c.signing_date else '',
-                    '状态': c.status or '',
-                    '已收付款': c.get_total_paid(),
-                    '未收付款': c.get_unpaid_amount(),
-                    '已开票': c.get_total_invoiced(),
-                    '未开票': c.get_uninvoiced_amount(),
-                })
-        else:
-            data.append({
-                '合同编号': c.contract_number or '',
-                '客户名称': c.customer_name,
-                '项目名称': c.project_name,
-                '产品名称': c.product_name or '',
-                '型号': c.model or '',
-                '单位': c.unit or '',
-                '数量': c.quantity,
-                '单价': c.unit_price,
-                '合同总价': c.total_price,
-                '发票税率': c.tax_rate,
-                '合同类型': c.contract_type or '',
-                '业务类型': c.business_type or '',
-                '项目负责人': c.project_staff or '',
-                '销售人员': c.sales_staff or '',
-                '签订日期': str(c.signing_date) if c.signing_date else '',
-                '状态': c.status or '',
-                '已收付款': c.get_total_paid(),
-                '未收付款': c.get_unpaid_amount(),
-                '已开票': c.get_total_invoiced(),
-                '未开票': c.get_uninvoiced_amount(),
-            })
-
-    # 按指定列顺序输出
+    # 合同级合并列索引（0-based，对应列：合同编号/客户名称/项目名称/合同总价/合同类型/业务类型/项目负责人/销售人员/签订日期/状态/已收付款/未收付款/已开票/未开票）
+    MERGE_COLS = [0, 1, 2, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     columns = ['合同编号', '客户名称', '项目名称', '产品名称', '型号', '单位', '数量', '单价',
                '合同总价', '发票税率', '合同类型', '业务类型', '项目负责人', '销售人员',
                '签订日期', '状态', '已收付款', '未收付款', '已开票', '未开票']
-    df = pd.DataFrame(data, columns=columns)
+
+    # 构建行数据，记录每个合同的起始行和行数（用于合并）
+    rows = []
+    contract_spans = []  # (start_row, row_count) 1-based，含表头偏移
+    for c in contracts:
+        products = ContractProduct.query.filter_by(contract_id=c.id).all()
+        contract_base = {
+            '合同编号': c.contract_number or '',
+            '客户名称': c.customer_name,
+            '项目名称': c.project_name,
+            '合同总价': c.total_price,
+            '合同类型': c.contract_type or (products[0].contract_type if products else ''),
+            '业务类型': c.business_type or '',
+            '项目负责人': c.project_staff or '',
+            '销售人员': c.sales_staff or '',
+            '签订日期': str(c.signing_date) if c.signing_date else '',
+            '状态': c.status or '',
+            '已收付款': c.get_total_paid(),
+            '未收付款': c.get_unpaid_amount(),
+            '已开票': c.get_total_invoiced(),
+            '未开票': c.get_uninvoiced_amount(),
+        }
+        start = len(rows)
+        if products:
+            for cp in products:
+                row = dict(contract_base)
+                row.update({'产品名称': cp.product_name or '', '型号': cp.model or '',
+                            '单位': cp.unit or '', '数量': cp.quantity,
+                            '单价': cp.unit_price, '发票税率': cp.tax_rate})
+                rows.append([row.get(col) for col in columns])
+        else:
+            row = dict(contract_base)
+            row.update({'产品名称': c.product_name or '', '型号': c.model or '',
+                        '单位': c.unit or '', '数量': c.quantity,
+                        '单价': c.unit_price, '发票税率': c.tax_rate})
+            rows.append([row.get(col) for col in columns])
+        contract_spans.append((start, len(rows) - start))
+
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '合同列表'
+    ws.append(columns)
+    for row in rows:
+        ws.append(row)
+
+    # 合并同一合同的合同级列单元格
+    for start, span in contract_spans:
+        if span > 1:
+            data_start = start + 2  # +1 header, +1 1-based
+            data_end = start + span + 1
+            for col_idx in MERGE_COLS:
+                col_letter = get_column_letter(col_idx + 1)
+                ws.merge_cells(f'{col_letter}{data_start}:{col_letter}{data_end}')
+
     buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='合同列表')
+    wb.save(buf)
     buf.seek(0)
     filename = f"合同导出_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
     return send_file(buf, download_name=filename, as_attachment=True,
@@ -628,11 +632,13 @@ def create_organization():
     else:
         parent_id = None
 
+    selected_perms = request.form.getlist('permissions')
     org = Organization(
         name=name,
         description=description,
         parent_id=parent_id,
-        customer_id=customer_id
+        customer_id=customer_id,
+        permissions=','.join(selected_perms) if selected_perms else None
     )
     db.session.add(org)
     db.session.commit()
@@ -665,6 +671,9 @@ def edit_organization(org_id):
         org.parent_id = int(parent_id)
     else:
         org.parent_id = None
+
+    selected_perms = request.form.getlist('permissions')
+    org.permissions = ','.join(selected_perms) if selected_perms else None
 
     db.session.commit()
     flash(f'组织"{org.name}"已更新', 'success')
@@ -730,6 +739,9 @@ def transfer_user():
             flash('目标组织不存在或权限不足', 'warning')
             return redirect(url_for('organizations'))
         user.organization_id = target_org_id
+        # 继承组织权限
+        if target_org.permissions:
+            user.permissions = target_org.permissions
         flash(f'用户"{user.username}"已调入组织"{target_org.name}"', 'success')
     else:
         # 调出组织（设为 None）
@@ -1167,31 +1179,32 @@ def export_statistics():
 
     # 新增：明细数据导出
     detail_rows = []
+    detail_spans = []  # (start, count) 每个合同的行范围
     if 'detail' in sheets:
         detail_contracts = q.order_by(Contract.signing_date.desc()).all()
+        DETAIL_MERGE_COLS = [0,1,2,4,6,7,8,9,10,11,12,13,14,15]  # 合同级列索引
         for c in detail_contracts:
             products = ContractProduct.query.filter_by(contract_id=c.id).all()
-            if products:
-                for cp in products:
-                    detail_rows.append([
-                        c.contract_number or '', c.customer_name, c.project_name,
-                        cp.product_name or '', c.total_price, cp.tax_rate,
-                        c.contract_type or (cp.contract_type or ''), c.business_type or '',
-                        c.project_staff or '', c.sales_staff or '',
-                        str(c.signing_date) if c.signing_date else '', c.status or '',
-                        c.get_total_paid(), c.get_unpaid_amount(),
-                        c.get_total_invoiced(), c.get_uninvoiced_amount(),
-                    ])
-            else:
-                detail_rows.append([
-                    c.contract_number or '', c.customer_name, c.project_name,
-                    c.product_name or '', c.total_price, c.tax_rate,
+            start = len(detail_rows)
+            base = [c.contract_number or '', c.customer_name, c.project_name,
+                    '', c.total_price, '',
                     c.contract_type or '', c.business_type or '',
                     c.project_staff or '', c.sales_staff or '',
                     str(c.signing_date) if c.signing_date else '', c.status or '',
                     c.get_total_paid(), c.get_unpaid_amount(),
-                    c.get_total_invoiced(), c.get_uninvoiced_amount(),
-                ])
+                    c.get_total_invoiced(), c.get_uninvoiced_amount()]
+            if products:
+                for cp in products:
+                    row = list(base)
+                    row[3] = cp.product_name or ''
+                    row[5] = cp.tax_rate
+                    detail_rows.append(row)
+            else:
+                row = list(base)
+                row[3] = c.product_name or ''
+                row[5] = c.tax_rate
+                detail_rows.append(row)
+            detail_spans.append((start, len(detail_rows) - start))
 
     # 收集各维度数据
     blocks = []  # [(col_name, data), ...]
@@ -1270,6 +1283,13 @@ def export_statistics():
         for ri, row in enumerate(detail_rows, 2):
             for ci, val in enumerate(row, 1):
                 ws_detail.cell(row=ri, column=ci, value=val)
+        # 合并同一合同的合同级列
+        from openpyxl.utils import get_column_letter as _gcl
+        for start, span in detail_spans:
+            if span > 1:
+                for col_idx in DETAIL_MERGE_COLS:
+                    cl = _gcl(col_idx + 1)
+                    ws_detail.merge_cells(f'{cl}{start+2}:{cl}{start+span+1}')
         wb2.save(buf2)
         buf2.seek(0)
         filename = f"统计导出_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
@@ -1369,7 +1389,19 @@ def new_contract():
 @app.route('/contract/<int:id>')
 def view_contract(id):
     contract = Contract.query.get_or_404(id)
-    return render_template('contract_detail.html', contract=contract)
+    return render_template('contract_detail.html', contract=contract, view_only=True)
+
+
+@app.route('/contract/<int:id>/manage')
+@login_required
+@permission_required('修改')
+def manage_contract(id):
+    contract = Contract.query.get_or_404(id)
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+    return render_template('contract_detail.html', contract=contract, view_only=False)
 
 
 @app.route('/contract/<int:id>/delete', methods=['POST'])
@@ -1474,11 +1506,15 @@ def add_payment(id):
     )
 
     if 'receipt_file' in request.files:
-        file = request.files['receipt_file']
-        if file.filename:
-            filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            payment.receipt_file = filename
+        files = request.files.getlist('receipt_file')
+        saved = []
+        for file in files:
+            if file.filename:
+                filename = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{file.filename}"
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                saved.append(filename)
+        if saved:
+            payment.receipt_file = ','.join(saved)
 
     db.session.add(payment)
     db.session.commit()
@@ -1503,11 +1539,15 @@ def add_delivery(id):
     )
 
     if 'delivery_file' in request.files:
-        file = request.files['delivery_file']
-        if file.filename:
-            filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            delivery.delivery_file = filename
+        files = request.files.getlist('delivery_file')
+        saved = []
+        for file in files:
+            if file.filename:
+                filename = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{file.filename}"
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                saved.append(filename)
+        if saved:
+            delivery.delivery_file = ','.join(saved)
 
     db.session.add(delivery)
     db.session.commit()
@@ -1519,22 +1559,34 @@ def add_delivery(id):
 @login_required
 @permission_required('增加')
 def add_invoice(id):
+    invoice_number = request.form.get('invoice_number', '').strip()
+    # 发票号重复检测
+    if invoice_number:
+        existing = Invoice.query.filter_by(invoice_number=invoice_number).first()
+        if existing:
+            flash(f'发票号"{invoice_number}"已存在，请核对重新输入', 'warning')
+            return redirect(url_for('view_contract', id=id))
+
     invoice = Invoice(
         contract_id=id,
         amount=float(request.form['amount']),
         received_date=datetime.strptime(request.form['received_date'], '%Y-%m-%d').date(),
-        invoice_number=request.form.get('invoice_number'),
+        invoice_number=invoice_number or None,
         note=request.form.get('note'),
         invoice_status=request.form.get('invoice_status', '未开具'),
-        invoice_type=request.form.get('invoice_type', '普票'),  # 新增：发票种类
+        invoice_type=request.form.get('invoice_type', '普票'),
     )
 
     if 'invoice_file' in request.files:
-        file = request.files['invoice_file']
-        if file.filename:
-            filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            invoice.invoice_file = filename
+        files = request.files.getlist('invoice_file')
+        saved = []
+        for file in files:
+            if file.filename:
+                filename = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{file.filename}"
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                saved.append(filename)
+        if saved:
+            invoice.invoice_file = ','.join(saved)
 
     db.session.add(invoice)
     db.session.commit()
@@ -1671,6 +1723,13 @@ def import_contracts():
                 flash(f'Excel 格式不正确，缺少必填列：{", ".join(missing_cols)}。'
                       f'请检查列名后重新上传。当前识别到的列：{", ".join(df.columns.tolist())}', 'warning')
                 return redirect(url_for('import_contracts'))
+
+            # 合同级字段向下填充（处理Excel合并单元格导致的NaN）
+            fill_cols = ['合同编号', '客户名称', '项目名称', '合同总价', '签订日期',
+                         '合同类型', '业务类型', '项目负责人', '销售人员', '状态', '发票税率']
+            for col in fill_cols:
+                if col in df.columns:
+                    df[col] = df[col].ffill()
 
             # 过滤全空行
             df = df[~(df['客户名称'].isna() & df['项目名称'].isna())]

@@ -230,6 +230,7 @@ document.addEventListener('click', function(e) {
             <td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td>
             <td>
                 <a href="{{ url_for('view_contract', id=contract.id) }}" class="btn btn-secondary">查看</a>
+                <a href="{{ url_for('manage_contract', id=contract.id) }}" class="btn btn-primary">编辑</a>
                 <form method="POST" action="{{ url_for('delete_contract', id=contract.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该合同？此操作不可恢复！')">删除</button>
                 </form>

@@ -25,13 +25,7 @@
     </div>
     <div class="form-group">
         <label>权限</label>
-        {% set perms = user.permissions.split(',') if user and user.permissions else [] %}
-        <label><input type="checkbox" name="permissions" value="增加" {% if '增加' in perms %}checked{% endif %}> 增加</label>
-        <label><input type="checkbox" name="permissions" value="删除" {% if '删除' in perms %}checked{% endif %}> 删除</label>
-        <label><input type="checkbox" name="permissions" value="修改" {% if '修改' in perms %}checked{% endif %}> 修改</label>
-        <label><input type="checkbox" name="permissions" value="查阅" {% if '查阅' in perms %}checked{% endif %}> 查阅</label>
-        <label><input type="checkbox" name="permissions" value="上传" {% if '上传' in perms %}checked{% endif %}> 上传</label>
-        <label><input type="checkbox" name="permissions" value="下载" {% if '下载' in perms %}checked{% endif %}> 下载</label>
+        <span style="color:#888;font-size:13px;">权限由所属组织统一管理，人员调动后自动继承组织权限</span>
     </div>
     <button type="submit" class="btn btn-primary">保存</button>
     <a href="{{ url_for('users') }}" class="btn btn-secondary">取消</a>

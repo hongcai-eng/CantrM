@@ -26,6 +26,16 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="form-group">
+            <label>权限管理</label>
+            <label><input type="checkbox" name="permissions" value="增加"> 增加</label>
+            <label><input type="checkbox" name="permissions" value="删除"> 删除</label>
+            <label><input type="checkbox" name="permissions" value="修改"> 修改</label>
+            <label><input type="checkbox" name="permissions" value="查阅"> 查阅</label>
+            <label><input type="checkbox" name="permissions" value="上传"> 上传</label>
+            <label><input type="checkbox" name="permissions" value="下载"> 下载</label>
+            <div style="color:#888;font-size:12px;margin-top:4px;">人员调动完成后，组织成员将自动继承以上权限</div>
+        </div>
         <button type="submit" class="btn btn-success">创建</button>
         <button type="button" onclick="document.getElementById('createOrgForm').style.display='none'" class="btn btn-secondary">取消</button>
     </form>
@@ -55,7 +65,7 @@
             <td>{{ org.members|length }}</td>
             <td>{{ org.created_at.strftime('%Y-%m-%d') }}</td>
             <td>
-                <button onclick="showEditForm({{ org.id }}, '{{ org.name }}', '{{ org.description or '' }}', {{ org.parent_id or 'null' }})" class="btn btn-primary">编辑</button>
+                <button onclick="showEditForm({{ org.id }}, '{{ org.name }}', '{{ org.description or '' }}', {{ org.parent_id or 'null' }}, '{{ org.permissions or '' }}')" class="btn btn-primary">编辑</button>
                 <form method="POST" action="{{ url_for('delete_organization', org_id=org.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该组织？')">删除</button>
                 </form>
@@ -86,6 +96,16 @@
                     <option value="{{ org.id }}">{{ org.name }}</option>
                     {% endfor %}
                 </select>
+            </div>
+            <div class="form-group">
+                <label>权限管理</label>
+                <label><input type="checkbox" name="permissions" value="增加" id="editPerm_增加"> 增加</label>
+                <label><input type="checkbox" name="permissions" value="删除" id="editPerm_删除"> 删除</label>
+                <label><input type="checkbox" name="permissions" value="修改" id="editPerm_修改"> 修改</label>
+                <label><input type="checkbox" name="permissions" value="查阅" id="editPerm_查阅"> 查阅</label>
+                <label><input type="checkbox" name="permissions" value="上传" id="editPerm_上传"> 上传</label>
+                <label><input type="checkbox" name="permissions" value="下载" id="editPerm_下载"> 下载</label>
+                <div style="color:#888;font-size:12px;margin-top:4px;">人员调动完成后，组织成员将自动继承以上权限</div>
             </div>
             <button type="submit" class="btn btn-success">保存</button>
             <button type="button" onclick="document.getElementById('editOrgModal').style.display='none'" class="btn btn-secondary">取消</button>
@@ -153,11 +173,15 @@ function showCreateForm() {
     document.getElementById('createOrgForm').style.display = 'block';
 }
 
-function showEditForm(orgId, name, desc, parentId) {
+function showEditForm(orgId, name, desc, parentId, perms) {
     document.getElementById('editOrgName').value = name;
     document.getElementById('editOrgDesc').value = desc;
     document.getElementById('editOrgParent').value = parentId || '';
     document.getElementById('editOrgForm').action = '/organization/' + orgId + '/edit';
+    var permList = perms ? perms.split(',') : [];
+    ['增加','删除','修改','查阅','上传','下载'].forEach(function(p) {
+        document.getElementById('editPerm_' + p).checked = permList.indexOf(p) >= 0;
+    });
     document.getElementById('editOrgModal').style.display = 'block';
 }
 </script>

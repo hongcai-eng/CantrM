@@ -2,7 +2,9 @@
 {% block content %}
 <div style="margin-bottom: 20px;">
     <a href="{{ url_for('index') }}" class="btn btn-secondary">返回列表</a>
+    {% if not view_only %}
     <a href="{{ url_for('edit_contract', id=contract.id) }}" class="btn btn-primary">编辑合同</a>
+    {% endif %}
 </div>
 
 <h2>{{ contract.project_name }}</h2>
@@ -73,6 +75,7 @@
 {% endif %}
 
 <h3>收付款记录</h3>
+{% if not view_only %}
 <form method="POST" action="{{ url_for('add_payment', id=contract.id) }}" enctype="multipart/form-data" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
     <div class="form-row">
         <div class="form-group">
@@ -99,13 +102,13 @@
     </div>
     <div class="form-group">
         <label>回单文件</label>
-        <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png" onchange="previewFile(this, 'receiptPreview')">
+        <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="previewFiles(this, 'receiptPreview')">
         <div id="receiptPreview" style="margin-top:10px;"></div>
     </div>
     <button type="submit" class="btn btn-success">添加</button>
 </form>
+{% endif %}
 <table>
-    <thead><tr><th>日期</th><th>类型</th><th>金额</th><th>备注</th><th>回单</th><th>操作</th></tr></thead>
     <tbody>
         {% for payment in contract.payments %}
         <tr>
@@ -115,8 +118,10 @@
             <td>{{ payment.note }}</td>
             <td>
                 {% if payment.receipt_file %}
-                <a href="{{ url_for('preview_file', filename=payment.receipt_file) }}" target="_blank">预览</a> |
-                <a href="{{ url_for('download_file', filename=payment.receipt_file) }}">下载</a> |
+                {% for fname in payment.receipt_file.split(',') %}
+                <div><a href="{{ url_for('preview_file', filename=fname) }}" target="_blank">预览</a> |
+                <a href="{{ url_for('download_file', filename=fname) }}">下载</a></div>
+                {% endfor %}
                 <form method="POST" action="{{ url_for('delete_payment_file', pid=payment.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该回单文件？')">删除</button>
                 </form>
@@ -133,6 +138,7 @@
 </table>
 
 <h3>交付记录</h3>
+{% if not view_only %}
 <form method="POST" action="{{ url_for('add_delivery', id=contract.id) }}" enctype="multipart/form-data" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
     <div class="form-row">
         <div class="form-group">
@@ -150,11 +156,12 @@
     </div>
     <div class="form-group">
         <label>交付记录文件</label>
-        <input type="file" name="delivery_file" accept=".pdf,.jpg,.jpeg,.png" onchange="previewFile(this, 'deliveryPreview')">
+        <input type="file" name="delivery_file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="previewFiles(this, 'deliveryPreview')">
         <div id="deliveryPreview" style="margin-top:10px;"></div>
     </div>
     <button type="submit" class="btn btn-success">添加</button>
 </form>
+{% endif %}
 <table>
     <thead><tr><th>日期</th><th>内容</th><th>备注</th><th>文件</th><th>操作</th></tr></thead>
     <tbody>
@@ -165,8 +172,10 @@
             <td>{{ delivery.note }}</td>
             <td>
                 {% if delivery.delivery_file %}
-                <a href="{{ url_for('preview_file', filename=delivery.delivery_file) }}" target="_blank">预览</a> |
-                <a href="{{ url_for('download_file', filename=delivery.delivery_file) }}">下载</a> |
+                {% for fname in delivery.delivery_file.split(',') %}
+                <div><a href="{{ url_for('preview_file', filename=fname) }}" target="_blank">预览</a> |
+                <a href="{{ url_for('download_file', filename=fname) }}">下载</a></div>
+                {% endfor %}
                 <form method="POST" action="{{ url_for('delete_delivery_file', did=delivery.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该交付文件？')">删除</button>
                 </form>
@@ -183,6 +192,7 @@
 </table>
 
 <h3>发票记录</h3>
+{% if not view_only %}
 <form method="POST" action="{{ url_for('add_invoice', id=contract.id) }}" enctype="multipart/form-data" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
     <div class="form-row">
         <div class="form-group">
@@ -197,7 +207,8 @@
     <div class="form-row">
         <div class="form-group">
             <label>发票号</label>
-            <input type="text" name="invoice_number">
+            <input type="text" name="invoice_number" id="invoiceNumberInput">
+            <div id="invoiceNumberWarn" style="color:red;font-size:12px;display:none;">该发票号已存在，请核对重新输入</div>
         </div>
         <div class="form-group">
             <label>开具状态</label>
@@ -224,11 +235,12 @@
     </div>
     <div class="form-group">
         <label>发票文件</label>
-        <input type="file" name="invoice_file" accept=".pdf,.jpg,.jpeg,.png" onchange="previewFile(this, 'invoicePreview')">
+        <input type="file" name="invoice_file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="previewFiles(this, 'invoicePreview')">
         <div id="invoicePreview" style="margin-top:10px;"></div>
     </div>
     <button type="submit" class="btn btn-success">添加</button>
 </form>
+{% endif %}
 <table>
     <thead><tr><th>日期</th><th>发票号</th><th>金额</th><th>发票类型</th><th>开具状态</th><th>备注</th><th>发票文件</th><th>操作</th></tr></thead>
     <tbody>
@@ -242,8 +254,10 @@
             <td>{{ invoice.note }}</td>
             <td>
                 {% if invoice.invoice_file %}
-                <a href="{{ url_for('preview_file', filename=invoice.invoice_file) }}" target="_blank">预览</a> |
-                <a href="{{ url_for('download_file', filename=invoice.invoice_file) }}">下载</a> |
+                {% for fname in invoice.invoice_file.split(',') %}
+                <div><a href="{{ url_for('preview_file', filename=fname) }}" target="_blank">预览</a> |
+                <a href="{{ url_for('download_file', filename=fname) }}">下载</a></div>
+                {% endfor %}
                 <form method="POST" action="{{ url_for('delete_invoice_file', iid=invoice.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该发票文件？')">删除</button>
                 </form>
@@ -259,20 +273,21 @@
     </tbody>
 </table>
 <script>
-function previewFile(input, previewId) {
+function previewFiles(input, previewId) {
     const preview = document.getElementById(previewId);
-    const file = input.files[0];
-    if (file) {
+    preview.innerHTML = '';
+    Array.from(input.files).forEach(function(file) {
         const reader = new FileReader();
         reader.onload = function(e) {
             if (file.type.startsWith('image/')) {
-                preview.innerHTML = '<img src="' + e.target.result + '" style="max-width:300px;">';
+                preview.innerHTML += '<img src="' + e.target.result + '" style="max-width:200px;margin:4px;">';
             } else if (file.type === 'application/pdf') {
-                preview.innerHTML = '<embed src="' + e.target.result + '" type="application/pdf" width="100%" height="400px">';
+                preview.innerHTML += '<span style="display:inline-block;padding:4px 8px;background:#eee;margin:4px;border-radius:3px;">📄 ' + file.name + '</span>';
             }
         };
         reader.readAsDataURL(file);
-    }
+    });
 }
+function previewFile(input, previewId) { previewFiles(input, previewId); }
 </script>
 {% endblock %}
