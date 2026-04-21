@@ -34,6 +34,8 @@
             <label><input type="checkbox" name="permissions" value="查阅"> 查阅</label>
             <label><input type="checkbox" name="permissions" value="上传"> 上传</label>
             <label><input type="checkbox" name="permissions" value="下载"> 下载</label>
+            <label><input type="checkbox" name="permissions" value="导入EXCEL"> 导入EXCEL</label>
+            <label><input type="checkbox" name="permissions" value="导出EXCEL"> 导出EXCEL</label>
             <div style="color:#888;font-size:12px;margin-top:4px;">人员调动完成后，组织成员将自动继承以上权限</div>
         </div>
         <button type="submit" class="btn btn-success">创建</button>
@@ -105,6 +107,8 @@
                 <label><input type="checkbox" name="permissions" value="查阅" id="editPerm_查阅"> 查阅</label>
                 <label><input type="checkbox" name="permissions" value="上传" id="editPerm_上传"> 上传</label>
                 <label><input type="checkbox" name="permissions" value="下载" id="editPerm_下载"> 下载</label>
+                <label><input type="checkbox" name="permissions" value="导入EXCEL" id="editPerm_导入EXCEL"> 导入EXCEL</label>
+                <label><input type="checkbox" name="permissions" value="导出EXCEL" id="editPerm_导出EXCEL"> 导出EXCEL</label>
                 <div style="color:#888;font-size:12px;margin-top:4px;">人员调动完成后，组织成员将自动继承以上权限</div>
             </div>
             <button type="submit" class="btn btn-success">保存</button>
@@ -179,7 +183,7 @@ function showEditForm(orgId, name, desc, parentId, perms) {
     document.getElementById('editOrgParent').value = parentId || '';
     document.getElementById('editOrgForm').action = '/organization/' + orgId + '/edit';
     var permList = perms ? perms.split(',') : [];
-    ['增加','删除','修改','查阅','上传','下载'].forEach(function(p) {
+    ['增加','删除','修改','查阅','上传','下载','导入EXCEL','导出EXCEL'].forEach(function(p) {
         document.getElementById('editPerm_' + p).checked = permList.indexOf(p) >= 0;
     });
     document.getElementById('editOrgModal').style.display = 'block';
