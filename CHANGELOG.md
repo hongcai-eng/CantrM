@@ -9,6 +9,13 @@
 - 人员调动后成员自动继承新增权限
 - **修改文件**：`templates/organizations.html`
 
+#### 3. 导入/导出Excel权限控制
+- 组织未赋予"导入EXCEL"权限时，成员无法访问导入功能，提示"你没有此项权限，请与管理员联系"
+- 组织未赋予"导出EXCEL"权限时，成员无法访问导出功能，同上提示
+- 合同列表页导入/导出按钮按权限显示或隐藏
+- 导出Excel按钮颜色由灰色改为亮蓝色（btn-info）
+- **修改文件**：`app.py`（`export_contracts`、`import_contracts`、`permission_required`、`index`）、`templates/index.html`
+
 ### 修复问题
 
 #### 2. 修复添加用户时用户名重复导致的数据库报错

@@ -130,7 +130,7 @@ def permission_required(permission):
                 return f(*args, **kwargs)
             if user.permissions and permission in user.permissions:
                 return f(*args, **kwargs)
-            flash('权限不足', 'warning')
+            flash('你没有此项权限，请与管理员联系', 'warning')
             return redirect(url_for('index'))
         return decorated_function
     return decorator
@@ -285,14 +285,17 @@ def index():
     }
 
     is_tenant_user = get_current_customer_id() is not None
+    current_user = User.query.get(session['user_id'])
+    user_permissions = current_user.permissions or ''
     return render_template('index.html', contracts=contracts, alerts=alerts,
                            available_years=available_years, stats=stats,
-                           is_tenant_user=is_tenant_user)
+                           is_tenant_user=is_tenant_user,
+                           user_permissions=user_permissions)
 
 
 # ── 新增：合同列表导出 Excel ──
 @app.route('/contract/export')
-@login_required
+@permission_required('导出EXCEL')
 def export_contracts():
     from sqlalchemy import func
     query = Contract.query
@@ -1705,6 +1708,7 @@ def delete_invoice_file(iid):
 
 
 @app.route('/import', methods=['GET', 'POST'])
+@permission_required('导入EXCEL')
 def import_contracts():
     if request.method == 'POST':
         if 'excel_file' not in request.files:
