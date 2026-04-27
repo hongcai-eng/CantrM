@@ -3,7 +3,9 @@
 <h2>统计分析</h2>
 
 <div style="margin-bottom: 20px;">
+    {% if user_permissions == 'all' or '导出EXCEL' in user_permissions %}
     <a href="javascript:void(0)" onclick="showExportDialog()" class="btn btn-success">导出Excel</a>
+    {% endif %}
 </div>
 
 <!-- 导出选项弹窗 -->

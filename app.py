@@ -1148,14 +1148,17 @@ def statistics():
     ).distinct().order_by(func.strftime('%Y', Contract.signing_date).desc()).all()
     available_years = [int(y[0]) for y in years_raw if y[0]]
 
+    user_permissions = User.query.get(session['user_id']).permissions or ''
     return render_template('statistics.html', stats=stats, filters=filters,
                            available_years=available_years, selected_sheets=selected_sheets,
-                           detail_contracts=detail_contracts)
+                           detail_contracts=detail_contracts,
+                           user_permissions=user_permissions)
 
 
 # ── 新增：统计分析导出 Excel ──
 @app.route('/statistics/export')
 @login_required
+@permission_required('导出EXCEL')
 def export_statistics():
     from sqlalchemy import func
     q = Contract.query

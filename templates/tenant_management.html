@@ -36,7 +36,7 @@
         <div class="form-group">
             <label>权限</label>
             <div style="display:flex;gap:15px;flex-wrap:wrap;padding:8px 0;">
-                {% for perm in ['增加','删除','修改','查阅','上传','下载'] %}
+                {% for perm in ['增加','删除','修改','查阅','上传','下载','导入EXCEL','导出EXCEL'] %}
                 <label style="font-weight:normal;display:flex;align-items:center;gap:4px;">
                     <input type="checkbox" name="permissions" value="{{ perm }}" checked> {{ perm }}
                 </label>
