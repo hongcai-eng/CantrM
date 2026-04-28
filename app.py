@@ -1040,7 +1040,7 @@ def search_products():
 
     products = q.limit(10).all()
     return jsonify([{
-        'id': p.id, 'name': p.name, 'model': p.model, 'unit': p.unit,
+        'id': p.id, 'name': p.name, 'category': p.category, 'model': p.model, 'unit': p.unit,
         'tax_rate': p.tax_rate, 'ref_quantity': p.ref_quantity, 'ref_unit_price': p.ref_unit_price
     } for p in products])
 

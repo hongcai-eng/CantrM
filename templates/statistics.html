@@ -133,27 +133,15 @@ function doExport() {
         </div>
     </div>
     <!-- 新增：显示维度勾选（控制页面统计表格的显示） -->
-    <div class="form-row" style="margin-top:10px;align-items:center;">
-        <div class="form-group" style="flex:none;">
-            <label style="font-weight:bold;margin-right:10px;">显示维度：</label>
-            <label style="margin-right:12px;font-weight:normal;">
-                <input type="checkbox" name="f_sheets" value="staff" {% if 'staff' in selected_sheets %}checked{% endif %}> 按项目负责人
-            </label>
-            <label style="margin-right:12px;font-weight:normal;">
-                <input type="checkbox" name="f_sheets" value="customer" {% if 'customer' in selected_sheets %}checked{% endif %}> 按客户
-            </label>
-            <label style="margin-right:12px;font-weight:normal;">
-                <input type="checkbox" name="f_sheets" value="type" {% if 'type' in selected_sheets %}checked{% endif %}> 按合同类型
-            </label>
-            <label style="margin-right:12px;font-weight:normal;">
-                <input type="checkbox" name="f_sheets" value="business" {% if 'business' in selected_sheets %}checked{% endif %}> 按业务类型
-            </label>
-            <label style="margin-right:12px;font-weight:normal;">
-                <input type="checkbox" name="f_sheets" value="status" {% if 'status' in selected_sheets %}checked{% endif %}> 按履约状态
-            </label>
-            <label style="margin-right:12px;font-weight:normal;">
-                <input type="checkbox" name="f_sheets" value="detail" {% if 'detail' in selected_sheets %}checked{% endif %}> 明细数据
-            </label>
+    <div style="margin-top:10px;">
+        <label style="font-weight:bold;display:block;margin-bottom:6px;">显示维度：</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 16px;">
+            <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="f_sheets" value="staff" {% if 'staff' in selected_sheets %}checked{% endif %}> 按项目负责人</label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="f_sheets" value="customer" {% if 'customer' in selected_sheets %}checked{% endif %}> 按客户</label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="f_sheets" value="type" {% if 'type' in selected_sheets %}checked{% endif %}> 按合同类型</label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="f_sheets" value="business" {% if 'business' in selected_sheets %}checked{% endif %}> 按业务类型</label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="f_sheets" value="status" {% if 'status' in selected_sheets %}checked{% endif %}> 按履约状态</label>
+            <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="f_sheets" value="detail" {% if 'detail' in selected_sheets %}checked{% endif %}> 明细数据</label>
         </div>
     </div>
     <button type="submit" class="btn btn-primary">筛选</button>

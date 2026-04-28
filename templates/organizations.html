@@ -28,14 +28,16 @@
         </div>
         <div class="form-group">
             <label>权限管理</label>
-            <label><input type="checkbox" name="permissions" value="增加"> 增加</label>
-            <label><input type="checkbox" name="permissions" value="删除"> 删除</label>
-            <label><input type="checkbox" name="permissions" value="修改"> 修改</label>
-            <label><input type="checkbox" name="permissions" value="查阅"> 查阅</label>
-            <label><input type="checkbox" name="permissions" value="上传"> 上传</label>
-            <label><input type="checkbox" name="permissions" value="下载"> 下载</label>
-            <label><input type="checkbox" name="permissions" value="导入EXCEL"> 导入EXCEL</label>
-            <label><input type="checkbox" name="permissions" value="导出EXCEL"> 导出EXCEL</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:4px;">
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="增加"> 增加</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="删除"> 删除</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="修改"> 修改</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="查阅"> 查阅</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="上传"> 上传</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="下载"> 下载</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="导入EXCEL"> 导入EXCEL</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="导出EXCEL"> 导出EXCEL</label>
+            </div>
             <div style="color:#888;font-size:12px;margin-top:4px;">人员调动完成后，组织成员将自动继承以上权限</div>
         </div>
         <button type="submit" class="btn btn-success">创建</button>
@@ -101,14 +103,16 @@
             </div>
             <div class="form-group">
                 <label>权限管理</label>
-                <label><input type="checkbox" name="permissions" value="增加" id="editPerm_增加"> 增加</label>
-                <label><input type="checkbox" name="permissions" value="删除" id="editPerm_删除"> 删除</label>
-                <label><input type="checkbox" name="permissions" value="修改" id="editPerm_修改"> 修改</label>
-                <label><input type="checkbox" name="permissions" value="查阅" id="editPerm_查阅"> 查阅</label>
-                <label><input type="checkbox" name="permissions" value="上传" id="editPerm_上传"> 上传</label>
-                <label><input type="checkbox" name="permissions" value="下载" id="editPerm_下载"> 下载</label>
-                <label><input type="checkbox" name="permissions" value="导入EXCEL" id="editPerm_导入EXCEL"> 导入EXCEL</label>
-                <label><input type="checkbox" name="permissions" value="导出EXCEL" id="editPerm_导出EXCEL"> 导出EXCEL</label>
+                <div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:4px;">
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="增加" id="editPerm_增加"> 增加</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="删除" id="editPerm_删除"> 删除</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="修改" id="editPerm_修改"> 修改</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="查阅" id="editPerm_查阅"> 查阅</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="上传" id="editPerm_上传"> 上传</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="下载" id="editPerm_下载"> 下载</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="导入EXCEL" id="editPerm_导入EXCEL"> 导入EXCEL</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="导出EXCEL" id="editPerm_导出EXCEL"> 导出EXCEL</label>
+                </div>
                 <div style="color:#888;font-size:12px;margin-top:4px;">人员调动完成后，组织成员将自动继承以上权限</div>
             </div>
             <button type="submit" class="btn btn-success">保存</button>

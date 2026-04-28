@@ -224,11 +224,12 @@
                         if (data.length > 0) {
                             suggestBox.innerHTML = data.map(p =>
                                 '<div style="padding:8px;cursor:pointer;" onclick="selectProduct(this,\'' +
-                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
-                                (p.unit||'').replace(/'/g,"&#39;") + '\')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
+                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.category||'').replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
+                                (p.unit||'').replace(/'/g,"&#39;") + '\',' + (p.tax_rate!=null?p.tax_rate:'null') + ',' + (p.ref_quantity!=null?p.ref_quantity:'null') + ',' + (p.ref_unit_price!=null?p.ref_unit_price:'null') + ')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
                             ).join('');
+                            suggestBox.style.display = 'block';
                         } else {
-                            suggestBox.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配产品 &nbsp;<a href="/products" target="_blank" style="color:#007bff;font-weight:bold;" onclick="input._productJumped=true;">去产品管理添加 ↗</a></div>';
+                            suggestBox.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配产品 &nbsp;<a href="/products" target="_blank" style="color:#007bff;font-weight:bold;" onclick="event.stopPropagation();input._productJumped=true;">去产品管理添加 ↗</a></div>';
                             suggestBox.style.display = 'block';
                         }
                     });
@@ -247,8 +248,8 @@
                         if (data.length > 0) {
                             suggestBox.innerHTML = data.map(p =>
                                 '<div style="padding:8px;cursor:pointer;" onclick="selectProduct(this,\'' +
-                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
-                                (p.unit||'').replace(/'/g,"&#39;") + '\')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
+                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.category||'').replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
+                                (p.unit||'').replace(/'/g,"&#39;") + '\',' + (p.tax_rate!=null?p.tax_rate:'null') + ',' + (p.ref_quantity!=null?p.ref_quantity:'null') + ',' + (p.ref_unit_price!=null?p.ref_unit_price:'null') + ')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
                             ).join('');
                             suggestBox.style.display = 'block';
                         }
@@ -257,11 +258,19 @@
         });
     }
 
-    function selectProduct(el, name, model, unit) {
+    function selectProduct(el, name, category, model, unit, taxRate, refQty, refPrice) {
         const item = el.closest('.product-item');
         item.querySelector('.product-name-input').value = name;
+        if (category) item.querySelector('.product-type-input').value = category;
         if (model) item.querySelector('.model-input').value = model;
         if (unit) item.querySelector('.unit-input').value = unit;
+        if (taxRate != null) item.querySelector('input[name="products[tax_rate][]"]').value = taxRate;
+        if (refQty != null) item.querySelector('.quantity-input').value = refQty;
+        if (refPrice != null) {
+            item.querySelector('.unit-price-input').value = refPrice;
+            const qty = parseFloat(item.querySelector('.quantity-input').value) || 0;
+            item.querySelector('.subtotal-input').value = (qty * refPrice).toFixed(2);
+        }
         el.closest('.product-suggestions').style.display = 'none';
     }
 
