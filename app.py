@@ -7,8 +7,11 @@ import pandas as pd
 from models import db, User, TenantCustomer, Organization, Customer, Product, Contract, ContractProduct, Payment, Delivery, Invoice, SysConfig
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///contracts.db'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///contracts.db')
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['UPLOAD_FOLDER'] = 'uploads'
 db.init_app(app)
 
