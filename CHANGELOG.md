@@ -1,12 +1,5 @@
 # 合同管理系统 - 更新日志
 
-# 变更日志 (CHANGELOG)
-
-
-阿里云存放路径：/opt/CantrM
-Git 远程仓库已正确配置为 https://github.com/hongcai-eng/CantrM。
-现在我将执行 git pull 命令拉取最新的代码更新
-
 ## v3.1 (2026-05-05)
 
 ### 优化功能
@@ -18,13 +11,9 @@ Git 远程仓库已正确配置为 https://github.com/hongcai-eng/CantrM。
 - 手机端字体、内边距适配小屏幕
 - **修改文件**：`templates/base.html`
 
-阿里云存放路径：/opt/CantrM
-Git 远程仓库已正确配置为 https://github.com/hongcai-eng/CantrM。
-将执行 git pull 命令拉取最新的代码更新
-
 ---
-2
-3## [2026-05-01] - ECS 实例访问问题修复
+
+## [2026-05-01] - ECS 实例访问问题修复
 4
 5### 实例信息
 6- **实例 ID**
