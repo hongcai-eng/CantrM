@@ -1,5 +1,65 @@
 # 合同管理系统 - 更新日志
 
+# 变更日志 (CHANGELOG)
+2
+3## [2026-05-01] - ECS 实例访问问题修复
+4
+5### 实例信息
+6- **实例 ID**
+: i-2ze51pstzfemfnvsc5sy
+7- **实例名称**
+: 合同管理系统
+8- **地域**
+: cn-beijing (北京)
+9- **公网 IP**
+: 39.96.197.212
+10- **操作系统**
+: Ubuntu 24.04 64位
+11
+12### 问题描述
+13
+实例状态为 Running，但无法通过 SSH 登录，也无法访问 HTTP 服务 (端口 5000)。
+14
+15### 根本原因
+161. **SSH 密码认证被禁用**: `/etc/ssh/sshd_config` 中 `PasswordAuthentication` 设置为 `no`
+172. **安全组规则限制**: 安全组入方向规则对特定 IP (111.194.200.191) 的 22 端口访问策略为 `drop`
+18
+19### 解决方案
+201.
+ ✅ 启用 SSH 密码认证
+21
+```bash
+22
+   sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+23
+   sed -i 's/^#PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+24   systemctl restart ssh
+ 
+2. ✅ 重置实例登录密码
+• 通过阿里云云助手在线重置密码功能完成
+验证结果
+• SSH 登录：成功
+• HTTP 服务访问：http://39.96.197.212:5000 ✅ 可正常访问
+后续建议
+• 首次登录后建议立即修改为强密码
+• 检查并更新安全组规则，确保允许信任 IP 的 22 端口和 5000 端口访问
+• 考虑配置密钥对登录以提高安全性
+
+
+
+## v3.0 (2026-04-30)
+
+### 部署配置
+
+#### 1. 支持阿里云/Railway 生产部署
+- 新增 `Procfile`，支持 gunicorn 启动
+- `requirements.txt` 添加 `gunicorn==21.2.0` 和 `psycopg2-binary==2.9.9`
+- `app.py` 数据库 URI 改为从环境变量 `DATABASE_URL` 读取，兼容 PostgreSQL
+- 自动修正 Railway 的 `postgres://` 前缀为 `postgresql://`
+- `SECRET_KEY` 改为从环境变量读取，本地保留默认值
+
+---
+
 ## v2.9 (2026-04-28)
 
 ### 新增功能
