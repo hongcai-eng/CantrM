@@ -34,6 +34,7 @@ class TenantCustomer(db.Model):
     # 新增：每个租户的品牌信息
     company_name = db.Column(db.String(200))
     logo_file = db.Column(db.String(200))
+    trial_expires_at = db.Column(db.DateTime, nullable=True)
     # 关联的用户
     users = db.relationship('User', backref='tenant', lazy=True)
 

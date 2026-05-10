@@ -141,11 +141,24 @@ def permission_required(permission):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    tenants = TenantCustomer.query.order_by(TenantCustomer.name).all()
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        user = User.query.filter_by(username=username).first()
+        customer_id = request.form.get('customer_id', '')
+
+        if customer_id:
+            user = User.query.filter_by(username=username, customer_id=int(customer_id)).first()
+        else:
+            user = User.query.filter_by(username=username, customer_id=None).first()
+
         if user and user.check_password(password):
+            # 检查试用期
+            if user.customer_id:
+                tenant = TenantCustomer.query.get(user.customer_id)
+                if tenant and tenant.trial_expires_at and datetime.utcnow() > tenant.trial_expires_at:
+                    flash('试用期已结束，请联系管理员续期', 'warning')
+                    return render_template('login.html', tenants=tenants)
             session['user_id'] = user.id
             session['username'] = user.username
             session['role'] = user.role
@@ -154,7 +167,38 @@ def login():
                 return redirect(url_for('tenant_management'))
             return redirect(url_for('index'))
         flash('用户名或密码错误', 'warning')
-    return render_template('login.html')
+    return render_template('login.html', tenants=tenants)
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        company = request.form['company'].strip()
+        username = request.form['username'].strip()
+        password = request.form['password'].strip()
+        if not company or not username or not password:
+            flash('请填写所有字段', 'warning')
+            return render_template('register.html')
+        if TenantCustomer.query.filter_by(name=company).first():
+            flash('公司名称已存在', 'warning')
+            return render_template('register.html')
+        if User.query.filter_by(username=username).first():
+            flash(f'用户名 "{username}" 已被使用', 'warning')
+            return render_template('register.html')
+        tenant = TenantCustomer(
+            name=company,
+            company_name=company,
+            trial_expires_at=datetime.utcnow() + timedelta(days=30)
+        )
+        db.session.add(tenant)
+        db.session.flush()
+        admin = User(username=username, role='超级管理员', permissions='all', customer_id=tenant.id)
+        admin.set_password(password)
+        db.session.add(admin)
+        db.session.commit()
+        flash('注册成功，试用期30天，请登录', 'success')
+        return redirect(url_for('login'))
+    return render_template('register.html')
 
 
 @app.route('/api/user_branding')

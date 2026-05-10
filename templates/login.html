@@ -36,6 +36,15 @@
         {% endwith %}
         <form method="POST" id="loginForm">
             <div class="form-group">
+                <label>公司</label>
+                <select name="customer_id" id="customerSelect" onchange="onCompanyChange(this)" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+                    <option value="">-- 系统管理员 --</option>
+                    {% for t in tenants %}
+                    <option value="{{ t.id }}">{{ t.company_name or t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
                 <label>切换账号</label>
                 <select id="accountSelect" onchange="fillAccount(this.value)" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
                     <option value="">-- 选择已记住的账号 --</option>
@@ -54,6 +63,7 @@
                 <label for="rememberAccount" style="margin:0;font-weight:normal;">记住此账号</label>
             </div>
             <button type="submit" class="btn">登录</button>
+            <p style="text-align:center;margin-top:15px;font-size:14px;">没有账号？<a href="/register">免费试用30天</a></p>
         </form>
         <script>
         // 默认品牌（页面加载时的初始值）
@@ -115,6 +125,15 @@
                 nameEl.innerHTML = companyName + '<br>合同管理系统';
             } else {
                 nameEl.innerHTML = '合同管理系统';
+            }
+        }
+
+        function onCompanyChange(sel) {
+            var opt = sel.options[sel.selectedIndex];
+            if (opt.value) {
+                updateBranding(opt.textContent.trim(), '');
+            } else {
+                updateBranding('', '');
             }
         }
 
