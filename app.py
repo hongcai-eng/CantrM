@@ -826,7 +826,7 @@ def new_user():
             customer_id = int(request.form['customer_id'])
 
         username = request.form['username']
-        existing = User.query.filter_by(username=username).first()
+        existing = User.query.filter_by(username=username, customer_id=customer_id).first()
         if existing:
             flash(f'用户名 "{username}" 已存在，请使用其他用户名', 'danger')
             tenants = TenantCustomer.query.all() if is_superadmin() else []

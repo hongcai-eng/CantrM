@@ -8,7 +8,8 @@ db = SQLAlchemy()
 # 用户模型 - 新增 customer_id 字段实现多租户
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
+    username = db.Column(db.String(50), nullable=False)
+    __table_args__ = (db.UniqueConstraint('username', 'customer_id', name='uq_user_username_tenant'),)
     password_hash = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(50), nullable=False)
     permissions = db.Column(db.String(500))
