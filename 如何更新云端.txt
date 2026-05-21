@@ -1,0 +1,96 @@
+
+
+> 程序部署在阿里云上，见部署说明.md和alydp.md,如何将我这两次的修改文件更新网络的部署上，保持原阿里云的数据库不变.
+
+● 先看一下部署说明文件。
+
+● Explore(查找部署说明文件)
+  ⎿  Done (5 tool uses · 18.7k tokens · 17s)
+  (ctrl+o to expand)
+
+● 根据部署说明，更新步骤如下：
+
+  服务器信息
+  - IP: 39.96.197.212，路径: /opt/CantrM
+
+  更新步骤（上传压缩包方式）
+
+  1. 本地打包修改的文件：
+  # 在本地项目目录执行，只打包修改的文件
+  zip update.zip models.py app.py templates/register.html templates/login.html
+
+  2. 上传到服务器：
+  scp update.zip root@39.96.197.212:/opt/CantrM/
+
+  3. SSH 登录服务器：
+  ssh root@39.96.197.212
+
+  4. 解压覆盖（数据库文件不在压缩包内，不会被覆盖）：
+  cd /opt/CantrM
+  unzip -o update.zip
+
+  5. 执行数据库迁移（新增了 trial_expires_at 字段）：
+  python3 -c "
+  import sqlite3
+  conn = sqlite3.connect('instance/contracts.db')
+  try:
+      conn.execute('ALTER TABLE tenant_customer ADD COLUMN trial_expires_at DATETIME')
+      conn.commit()
+      print('迁移成功')
+  except Exception as e:
+      print('已存在或出错:', e)
+  conn.close()
+  "
+
+  6. 重启服务：
+  pkill -f "python3 app.py" && nohup python3 app.py > app.log 2>&1 &
+
+  7. 验证：
+  ps aux | grep app.py
+  curl http://localhost:5000
+
+  注意：instance/contracts.db 不在压缩包内，原数据库完全保留。迁移脚本用 try/except 包裹，字段已存在时不会报错。
+
+✻ Baked for 40s
+
+> 我现在阿里云上，如何操作？
+
+● 你现在已经SSH登录到阿里云服务器了吗？还是需要先登录？
+
+  请告诉我你当前的状态：
+  1. 已在服务器上（ssh root@39.96.197.212 已连接）
+  2. 还在本地，需要先上传文件再登录
+
+✻ Brewed for 6s
+
+> 1
+
+● 好，你已经在服务器上了。按顺序执行以下命令：
+
+  第一步：进入项目目录
+  cd /opt/CantrM
+
+  第二步：备份当前文件（保险起见）
+  cp app.py app.py.bak && cp models.py models.py.bak
+
+  第三步：从本地上传修改的文件
+
+  你需要在本地另开一个终端，执行：
+  scp app.py models.py templates/register.html templates/login.html root@39.96.197.212:/opt/CantrM/templates/
+
+  等等，让我确认一下你本地的修改文件有哪些。根据最近两次提交：
+
+  - a0ecf0f（注册+登录）修改了：models.py、app.py、templates/register.html（新建）、templates/login.html
+  - 731ae9e（跨租户隔离）修改了：app.py（主要）
+
+  在本地终端执行上传：
+  cd E:/claude/cantrm
+  scp app.py models.py root@39.96.197.212:/opt/CantrM/
+  scp templates/register.html templates/login.html root@39.96.197.212:/opt/CantrM/templates/
+
+  上传完成后，回到服务器终端告诉我，继续执行迁移和重启。
+
+✻ Baked for 9s
+
+※ recap: 正在将本地两次修改（注册/登录功能+跨租户隔离）部署到阿里云服务器，数据库保持不变。下一步：在本地终端执行 scp
+  上传 app.py、models.py、templates/register.html、templates/login.html 到服务器。 (disable recaps in /config)

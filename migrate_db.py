@@ -177,6 +177,94 @@ def migrate():
         else:
             print(f"[ERROR] contract 表添加字段失败: {e}")
 
+    # 14. 为 tenant_customer 表添加 trial_expires_at 字段（v3.2 自助注册试用期）
+    try:
+        cursor.execute("ALTER TABLE tenant_customer ADD COLUMN trial_expires_at DATETIME")
+        print("[OK] tenant_customer 表添加 trial_expires_at 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] tenant_customer.trial_expires_at 字段已存在")
+        else:
+            print(f"[ERROR] tenant_customer 表添加字段失败: {e}")
+
+    # 15. 修正 user 表唯一约束：UNIQUE(username) -> UNIQUE(username, customer_id)（v3.3 跨租户用户名隔离）
+    try:
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='user'")
+        row = cursor.fetchone()
+        table_sql = row[0] if row else ''
+        normalized = ''.join(table_sql.split()).replace('"', '').replace('`', '')
+        if 'UNIQUE(username,customer_id)' in normalized:
+            print("[SKIP] user 表唯一约束已是 UNIQUE(username, customer_id)")
+        else:
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.execute("""
+                CREATE TABLE user_new (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    username VARCHAR(50) NOT NULL,
+                    password_hash VARCHAR(200) NOT NULL,
+                    role VARCHAR(50) NOT NULL,
+                    permissions VARCHAR(500),
+                    created_at DATETIME,
+                    customer_id INTEGER,
+                    organization_id INTEGER,
+                    UNIQUE (username, customer_id),
+                    FOREIGN KEY(customer_id) REFERENCES tenant_customer(id),
+                    FOREIGN KEY(organization_id) REFERENCES organization(id)
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO user_new (id, username, password_hash, role, permissions, created_at, customer_id, organization_id)
+                SELECT id, username, password_hash, role, permissions, created_at, customer_id, organization_id FROM user
+            """)
+            cursor.execute("DROP TABLE user")
+            cursor.execute("ALTER TABLE user_new RENAME TO user")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            print("[OK] user 表唯一约束修正为 UNIQUE(username, customer_id)")
+    except Exception as e:
+        print(f"[ERROR] user 表唯一约束修正失败: {e}")
+
+    # 16. 为 organization 表添加 permissions 字段（v2.6 组织权限管理）
+    try:
+        cursor.execute("ALTER TABLE organization ADD COLUMN permissions VARCHAR(500)")
+        print("[OK] organization 表添加 permissions 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] organization.permissions 字段已存在")
+        elif "no such table" in str(e).lower():
+            print("[SKIP] organization 表不存在，跳过")
+        else:
+            print(f"[ERROR] organization 表添加字段失败: {e}")
+
+    # 17. 为 invoice 表添加 invoice_status 字段（开票状态：已开具/未开具）
+    try:
+        cursor.execute("ALTER TABLE invoice ADD COLUMN invoice_status VARCHAR(20) DEFAULT '未开具'")
+        print("[OK] invoice 表添加 invoice_status 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] invoice.invoice_status 字段已存在")
+        else:
+            print(f"[ERROR] invoice 表添加字段失败: {e}")
+
+    # 18. 为 invoice 表添加 invoice_type 字段（发票类型：普票/专票）
+    try:
+        cursor.execute("ALTER TABLE invoice ADD COLUMN invoice_type VARCHAR(20) DEFAULT '普票'")
+        print("[OK] invoice 表添加 invoice_type 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] invoice.invoice_type 字段已存在")
+        else:
+            print(f"[ERROR] invoice 表添加字段失败: {e}")
+
+    # 19. 为 contract_product 表添加 contract_type 字段（步骤6 CREATE 时虽包含，但旧表已存在时不会补列）
+    try:
+        cursor.execute("ALTER TABLE contract_product ADD COLUMN contract_type VARCHAR(50)")
+        print("[OK] contract_product 表添加 contract_type 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] contract_product.contract_type 字段已存在")
+        else:
+            print(f"[ERROR] contract_product 表添加字段失败: {e}")
+
     conn.commit()
     conn.close()
     print("\n数据库迁移完成！")

@@ -1,5 +1,39 @@
 # 合同管理系统 - 更新日志
 
+## v3.4 (2026-05-21)
+Resume this session with:
+claude --resume 3416a42c-71ee-4f9b-b6d6-fdfdc746548b
+### 修复
+
+#### 旧备份恢复后数据库字段缺失导致报错
+- 场景：系统更新后，将旧版本备份的 `instance/` 和 `uploads/` 文件夹替换回新系统，启动后访问页面报错
+  `OperationalError: no such column: tenant_customer.trial_expires_at`
+- 原因：旧备份的 `contracts.db` 没有 v3.2 新增的 `trial_expires_at` 字段，新代码 ORM 查询此字段时失败
+- 解决：编写一次性补字段脚本 `fix_db.py`，对旧库执行 `ALTER TABLE tenant_customer ADD COLUMN trial_expires_at DATETIME`，运行后刷新页面即恢复
+- **新增文件**：`fix_db.py`（执行完可删除）
+- **使用方法**：将 `fix_db.py` 放到项目根目录，执行 `python fix_db.py`，看到 `done` 后刷新浏览器即可
+
+#### 旧备份恢复后创建用户报 UNIQUE constraint failed
+- 场景：将旧备份 `instance/contracts.db` 恢复到新系统后，在某租户创建用户（如"梁靓"）报错
+  `IntegrityError: UNIQUE constraint failed: user.username`，但该租户内并无同名用户（实为其他租户已存在同名）
+- 原因：旧备份的 `user` 表唯一约束仍是 `UNIQUE(username)`，未升级到 v3.3 的 `UNIQUE(username, customer_id)`
+- 解决：`migrate_db.py` 新增步骤15，自动检测并重建 `user` 表，把唯一约束改为 `UNIQUE(username, customer_id)`，原有数据迁移到新表（SQLite 不支持直接修改约束，必须 CREATE 新表 → 复制数据 → DROP 旧表 → RENAME）
+- **修改文件**：`migrate_db.py`
+
+#### 补齐 migrate_db.py 历史漏项（预防其他潜在报错）
+- 系统对比 `models.py` 与 `migrate_db.py` 后发现，旧备份恢复时还可能因以下字段缺失而报错，现一并补入迁移脚本：
+  - `organization.permissions`（v2.6 组织权限管理新增） — 旧备份若已有 `organization` 表，CREATE IF NOT EXISTS 会跳过，无法补列
+  - `invoice.invoice_status`（开票状态：已开具/未开具） — 用于合同详情、统计、筛选页，缺失会导致大面积报错
+  - `invoice.invoice_type`（发票类型：普票/专票）
+  - `contract_product.contract_type`（步骤6 CREATE 时虽含此列，但旧表已存在时不补列）
+- **修改文件**：`migrate_db.py`（新增步骤16~19）
+
+### 升级提示
+- 已将 `trial_expires_at` 字段补入 `migrate_db.py`（步骤14），后续从旧备份恢复 `instance/` 后，统一执行 `python migrate_db.py` 即可一次性补齐所有缺失字段，无需再用 `fix_db.py`
+- 步骤15会自动判断 `user` 表当前约束，已是新格式则跳过，幂等可重复执行
+
+---
+
 ## v3.3 (2026-05-12)
 
 ### 修复
