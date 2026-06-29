@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ product_type }}产品档案库</h2>
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('new_product_with_type', product_type=product_type) }}" class="btn btn-primary">新建{{ product_type }}产品</a>
+</div>
+
+<div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+    <form method="GET" action="{{ url_for('product_archive', product_type=product_type) }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>产品名称</label>
+                <input type="text" name="name" value="{{ request.args.get('name', '') }}">
+            </div>
+            <div class="form-group">
+                <label>型号</label>
+                <input type="text" name="model" value="{{ request.args.get('model', '') }}">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">筛选</button>
+        <a href="{{ url_for('product_archive', product_type=product_type) }}" class="btn btn-secondary">清除</a>
+    </form>
+</div>
+
+<div style="background:#e7f3ff;padding:15px;border-radius:4px;margin-bottom:20px;border-left:4px solid #007bff;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:15px;">
+        <div>
+            <div style="color:#666;font-size:13px;">产品数量</div>
+            <div style="font-size:20px;font-weight:bold;color:#333;">{{ products|length }}</div>
+        </div>
+    </div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>产品名称</th>
+            <th>产品类型</th>
+            <th>型号</th>
+            <th>单位</th>
+            <th>税率(%)</th>
+            <th>参考数量</th>
+            <th>参考单价</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+        <tr>
+            <td>{{ product.name }}</td>
+            <td>{{ product.category }}</td>
+            <td>{{ product.model or '-' }}</td>
+            <td>{{ product.unit or '-' }}</td>
+            <td>{{ product.tax_rate|notrailzero if product.tax_rate else '-' }}</td>
+            <td>{{ product.ref_quantity|notrailzero if product.ref_quantity else '-' }}</td>
+            <td>{{ product.ref_unit_price|notrailzero if product.ref_unit_price else '-' }}</td>
+            <td>
+                {% if user_permissions == 'all' or '修改' in user_permissions %}
+                <button onclick="editProduct({{ product.id }}, '{{ product.name }}', '{{ product.category }}', '{{ product.model or '' }}', '{{ product.unit or '' }}', {{ product.tax_rate or 'null' }}, {{ product.ref_quantity or 'null' }}, {{ product.ref_unit_price or 'null' }})" class="btn btn-secondary">编辑</button>
+                {% endif %}
+                {% if user_permissions == 'all' or '删除' in user_permissions %}
+                <form method="POST" action="{{ url_for('delete_product', id=product.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该产品？')">删除</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="editForm" style="display:none; margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 4px; background: white;">
+    <h3>编辑产品</h3>
+    <form method="POST" id="editFormAction">
+        <div class="form-row">
+            <div class="form-group">
+                <label>产品名称*</label>
+                <input type="text" name="name" id="editName" required>
+            </div>
+            <div class="form-group">
+                <label>产品类型</label>
+                <input type="text" name="category" id="editCategory" readonly style="background:#f0f0f0;">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>型号</label>
+                <input type="text" name="model" id="editModel">
+            </div>
+            <div class="form-group">
+                <label>单位</label>
+                <input type="text" name="unit" id="editUnit">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>税率(%)</label>
+                <input type="number" step="0.01" name="tax_rate" id="editTaxRate">
+            </div>
+            <div class="form-group">
+                <label>参考数量</label>
+                <input type="number" step="0.01" name="ref_quantity" id="editRefQuantity">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>参考单价</label>
+            <input type="number" step="0.01" name="ref_unit_price" id="editRefUnitPrice">
+        </div>
+        <button type="submit" class="btn btn-success">保存</button>
+        <button type="button" onclick="document.getElementById('editForm').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+</div>
+
+<script>
+function editProduct(id, name, category, model, unit, tax_rate, ref_quantity, ref_unit_price) {
+    document.getElementById('editForm').style.display = 'block';
+    document.getElementById('editFormAction').action = '/product/' + id + '/edit';
+    document.getElementById('editName').value = name;
+    document.getElementById('editCategory').value = category;
+    document.getElementById('editModel').value = model || '';
+    document.getElementById('editUnit').value = unit || '';
+    document.getElementById('editTaxRate').value = tax_rate !== null ? tax_rate : '';
+    document.getElementById('editRefQuantity').value = ref_quantity !== null ? ref_quantity : '';
+    document.getElementById('editRefUnitPrice').value = ref_unit_price !== null ? ref_unit_price : '';
+    // 滚动到编辑表单
+    document.getElementById('editForm').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+{% endblock %}

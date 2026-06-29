@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ business_type }}客户档案</h2>
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('new_customer_with_type', business_type=business_type) }}" class="btn btn-primary">新建{{ business_type }}客户</a>
+</div>
+
+<div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+    <form method="GET" action="{{ url_for('customer_archive', business_type=business_type) }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>客户名称</label>
+                <input type="text" name="name" value="{{ request.args.get('name', '') }}">
+            </div>
+            <div class="form-group">
+                <label>省份</label>
+                <input type="text" name="province" value="{{ request.args.get('province', '') }}">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">筛选</button>
+        <a href="{{ url_for('customer_archive', business_type=business_type) }}" class="btn btn-secondary">清除</a>
+    </form>
+</div>
+
+<div style="background:#e7f3ff;padding:15px;border-radius:4px;margin-bottom:20px;border-left:4px solid #007bff;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:15px;">
+        <div>
+            <div style="color:#666;font-size:13px;">客户数量</div>
+            <div style="font-size:20px;font-weight:bold;color:#333;">{{ customers|length }}</div>
+        </div>
+    </div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>客户名称</th>
+            <th>省份</th>
+            <th>区域</th>
+            <th>统一信用代码</th>
+            <th>业务类型</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for customer in customers %}
+        <tr>
+            <td>{{ customer.name }}</td>
+            <td>{{ customer.province or '-' }}</td>
+            <td>{{ customer.region or '-' }}</td>
+            <td>{{ customer.credit_code or '-' }}</td>
+            <td>{{ customer.business_type }}</td>
+            <td>
+                {% if user_permissions == 'all' or '修改' in user_permissions %}
+                <button onclick="editCustomer({{ customer.id }}, '{{ customer.name }}', '{{ customer.province or '' }}', '{{ customer.region or '' }}', '{{ customer.credit_code or '' }}')" class="btn btn-secondary">编辑</button>
+                {% endif %}
+                {% if user_permissions == 'all' or '删除' in user_permissions %}
+                <form method="POST" action="{{ url_for('delete_customer', id=customer.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该客户？')">删除</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="editForm" style="display:none; margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 4px; background: white;">
+    <h3>编辑客户</h3>
+    <form method="POST" id="editFormAction">
+        <div class="form-row">
+            <div class="form-group">
+                <label>客户名称*</label>
+                <input type="text" name="name" id="editName" required>
+            </div>
+            <div class="form-group">
+                <label>省份</label>
+                <input type="text" name="province" id="editProvince">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>区域</label>
+                <input type="text" name="region" id="editRegion">
+            </div>
+            <div class="form-group">
+                <label>统一信用代码</label>
+                <input type="text" name="credit_code" id="editCreditCode">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success">保存</button>
+        <button type="button" onclick="document.getElementById('editForm').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+</div>
+
+<script>
+function editCustomer(id, name, province, region, credit_code) {
+    document.getElementById('editForm').style.display = 'block';
+    document.getElementById('editFormAction').action = '/customer/' + id + '/edit';
+    document.getElementById('editName').value = name;
+    document.getElementById('editProvince').value = province || '';
+    document.getElementById('editRegion').value = region || '';
+    document.getElementById('editCreditCode').value = credit_code || '';
+    // 滚动到编辑表单
+    document.getElementById('editForm').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+{% endblock %}

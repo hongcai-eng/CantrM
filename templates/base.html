@@ -6,12 +6,100 @@
     <title>合同管理系统</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
-        .nav { background: #333; padding: 10px 20px; margin: -20px -20px 20px -20px; }
-        .nav a { color: white; text-decoration: none; padding: 10px 15px; display: inline-block; }
-        .nav a:hover { background: #555; }
-        .nav .right { float: right; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+
+        /* 顶部导航栏 */
+        .top-nav { background: #333; padding: 10px 20px; display: flex; align-items: center; position: relative; z-index: 100; }
+        .menu-toggle { display: none; background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 5px 10px; }
+        .top-nav .logo { color: white; font-size: 18px; font-weight: bold; margin-right: auto; display: flex; align-items: center; }
+        .top-nav .logo img { height: 30px; margin-right: 10px; }
+
+        /* 顶部横向菜单 */
+        .top-menu { display: flex; align-items: center; gap: 0; flex: 1; }
+        .top-menu > li { list-style: none; position: relative; }
+        .top-menu > li > a { display: block; padding: 10px 15px; color: white; text-decoration: none; white-space: nowrap; cursor: pointer; }
+        .top-menu > li > a:hover { background: #555; }
+        .top-menu > li.active > a { background: #555; }
+
+        /* 用户信息 */
+        .user-info { display: flex; align-items: center; gap: 15px; margin-left: auto; }
+        .user-info span, .user-info a { color: white; text-decoration: none; white-space: nowrap; }
+        .user-info a:hover { text-decoration: underline; }
+
+        /* 左侧弹出菜单（点击顶部菜单时显示） */
+        .sidebar-panel {
+            position: fixed;
+            left: -280px;
+            top: 50px;
+            width: 280px;
+            height: calc(100vh - 50px);
+            background: #2c3e50;
+            color: white;
+            overflow-y: auto;
+            transition: left 0.3s ease;
+            z-index: 99;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+        }
+        .sidebar-panel.open { left: 0; }
+
+        /* 左侧菜单内容 */
+        .sidebar-menu { list-style: none; padding: 0; }
+        .sidebar-menu li { border-bottom: 1px solid #34495e; }
+        .sidebar-menu a { display: block; padding: 12px 20px; color: white; text-decoration: none; transition: background 0.3s; }
+        .sidebar-menu a:hover { background: #34495e; }
+
+        /* 可展开菜单项 */
+        .menu-item-expandable { position: relative; }
+        .menu-item-expandable > a { cursor: pointer; padding-right: 40px !important; }
+        .menu-item-expandable > a::after {
+            content: '▼';
+            position: absolute;
+            right: 20px;
+            transition: transform 0.3s;
+            font-size: 12px;
+        }
+        .menu-item-expandable:not(.active) > a::after {
+            content: '▶';
+            transform: rotate(0deg);
+        }
+        .menu-item-expandable.active > a::after {
+            content: '▼';
+            transform: rotate(0deg);
+        }
+
+        /* 子菜单 */
+        .submenu { display: none; background: #1a252f; list-style: none; }
+        .menu-item-expandable.active > .submenu { display: block; }
+        .submenu a { padding-left: 35px; font-size: 14px; }
+
+        /* 三级菜单 */
+        .submenu .menu-item-expandable > a { padding-left: 35px; }
+        .submenu .submenu a { padding-left: 50px; font-size: 13px; }
+
+        /* 四级菜单 */
+        .submenu .submenu .submenu a { padding-left: 65px; font-size: 12px; }
+
+        /* 遮罩层 */
+        .overlay {
+            position: fixed;
+            top: 50px;
+            left: 0;
+            width: 100%;
+            height: calc(100vh - 50px);
+            background: rgba(0,0,0,0.5);
+            display: none;
+            z-index: 98;
+        }
+        .overlay.show { display: block; }
+
+        /* 主内容区域 */
+        .main-content {
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
         h1, h2 { color: #333; margin-bottom: 20px; }
         .alert { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
         .alert-warning { background: #fff3cd; border-left: 4px solid #ffc107; }
@@ -21,6 +109,7 @@
         .btn-success { background: #28a745; color: white; }
         .btn-secondary { background: #6c757d; color: white; }
         .btn-danger { background: #dc3545; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
         .btn:hover { opacity: 0.9; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
@@ -34,23 +123,43 @@
         .page-title { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
         .page-title img { height: 36px; width: auto; }
 
-        /* 汉堡菜单按钮（手机显示） */
-        .nav-toggle { display: none; background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 5px 10px; }
-        .nav-links { display: flex; flex-wrap: wrap; align-items: center; }
-        .nav-links a { color: white; text-decoration: none; padding: 10px 15px; display: inline-block; }
-        .nav-links a:hover { background: #555; }
-        .nav-right { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; }
-        .nav-right span, .nav-right a { color: white; padding: 10px; text-decoration: none; }
+        /* 侧边栏展开按钮 */
+        .sidebar-toggle-btn {
+            position: fixed;
+            left: 10px;
+            top: 70px;
+            width: 40px;
+            height: 40px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            z-index: 50;
+            transition: all 0.3s;
+        }
+        .sidebar-toggle-btn:hover {
+            background: #0056b3;
+            transform: scale(1.1);
+        }
+        .sidebar-toggle-btn.show {
+            display: flex;
+        }
 
+        /* 移动端响应式 */
         @media (max-width: 768px) {
-            body { padding: 10px; }
-            .nav { padding: 8px 12px; display: flex; flex-wrap: wrap; align-items: center; }
-            .nav-toggle { display: block; }
-            .nav-links { display: none; width: 100%; flex-direction: column; align-items: flex-start; }
-            .nav-links.open { display: flex; }
-            .nav-links a { width: 100%; padding: 10px 15px; border-top: 1px solid #444; }
-            .nav-right { width: 100%; flex-direction: column; align-items: flex-start; border-top: 1px solid #444; }
-            .nav-right span, .nav-right a { padding: 8px 15px; }
+            .menu-toggle { display: block; }
+            .top-menu { display: none; }
+            .sidebar-panel {
+                left: -280px;
+                top: 50px;
+            }
+            .sidebar-panel.open { left: 0; }
             .container { padding: 12px; }
             .form-row { grid-template-columns: 1fr; }
             table { display: block; overflow-x: auto; white-space: nowrap; }
@@ -60,51 +169,288 @@
     </style>
 </head>
 <body>
-    <div class="nav">
-        <button class="nav-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')">&#9776;</button>
-        <div class="nav-links" id="navLinks">
-            {% if session.username == 'superadmin' %}
-            <a href="{{ url_for('tenant_management') }}">租户管理</a>
-            <a href="{{ url_for('sysconfig') }}">系统配置</a>
-            {% else %}
-            <a href="{{ url_for('index') }}">合同列表</a>
-            <a href="{{ url_for('customers') }}">客户管理</a>
-            <a href="{{ url_for('products') }}">产品管理</a>
-            <a href="{{ url_for('statistics') }}">统计分析</a>
-            {% if session.role == '超级管理员' %}
-            <a href="{{ url_for('users') }}">用户管理</a>
-            <a href="{{ url_for('organizations') }}">组织管理</a>
-            <a href="{{ url_for('sysconfig') }}">系统配置</a>
-            {% endif %}
-            {% endif %}
-            <div class="nav-right">
-                {% if current_tenant_name %}
-                <span style="color: #adf; font-size:13px;">【{{ current_tenant_name }} - 合同管理系统】</span>
-                {% elif session.username == 'superadmin' %}
-                <span style="color: #adf; font-size:13px;">【系统总后台】</span>
-                {% endif %}
-                <span>{{ session.username }} ({{ session.role }})</span>
-                <a href="{{ url_for('logout') }}">退出</a>
-            </div>
-        </div>
-    </div>
-    <div class="container">
-        <div class="page-title">
-            {% if session.username == 'superadmin' %}
-            <h1>系统总后台 - 合同管理系统</h1>
-            {% else %}
+    <!-- 顶部导航 -->
+    <div class="top-nav">
+        <button class="menu-toggle" onclick="toggleMobileSidebar()">☰</button>
+        <div class="logo">
             {% if company_logo_file %}<img src="{{ url_for('static', filename=company_logo_file) }}" alt="logo">{% endif %}
-            <h1>{% if company_name %}{{ company_name }} - {% endif %}合同管理系统</h1>
-            {% endif %}
+            {% if company_name %}{{ company_name }}{% endif %} - 合同管理系统
         </div>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
+
+        <!-- 桌面端横向菜单 -->
+        <ul class="top-menu">
+            {% if session.username == 'superadmin' %}
+            <li><a href="{{ url_for('tenant_management') }}">租户管理</a></li>
+            <li><a href="{{ url_for('sysconfig') }}">系统配置</a></li>
+            {% else %}
+            <li id="contractMenu">
+                <a href="{{ url_for('index') }}">合同管理</a>
+            </li>
+            <li id="customerMenu">
+                <a href="{{ url_for('customers') }}">客户管理</a>
+            </li>
+            <li id="productMenu">
+                <a href="{{ url_for('products') }}">产品管理</a>
+            </li>
+            <li><a href="{{ url_for('statistics') }}">统计分析</a></li>
+            {% if session.role == '超级管理员' %}
+            <li><a href="{{ url_for('users') }}">用户管理</a></li>
+            <li><a href="{{ url_for('organizations') }}">组织管理</a></li>
+            <li><a href="{{ url_for('sysconfig') }}">系统配置</a></li>
             {% endif %}
-        {% endwith %}
-        {% block content %}{% endblock %}
+            {% endif %}
+        </ul>
+
+        <div class="user-info">
+            {% if current_tenant_name %}
+            <span style="color: #adf; font-size:13px;">【{{ current_tenant_name }}】</span>
+            {% elif session.username == 'superadmin' %}
+            <span style="color: #adf; font-size:13px;">【系统总后台】</span>
+            {% endif %}
+            <span>{{ session.username }} ({{ session.role }})</span>
+            <a href="{{ url_for('logout') }}">退出</a>
+        </div>
     </div>
+
+    <!-- 遮罩层 -->
+    <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+    <!-- 侧边栏展开按钮 -->
+    <button class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="showSidebarFromButton()">
+        ☰
+    </button>
+
+    <!-- 左侧弹出菜单 - 合同管理 -->
+    <aside class="sidebar-panel" id="sidebarContract">
+        <ul class="sidebar-menu">
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">采购合同</a>
+                <ul class="submenu" style="display: block;">
+                    <li class="menu-item-expandable active">
+                        <a onclick="toggleSubmenu(this)">新建合同</a>
+                        <ul class="submenu" style="display: block;">
+                            <li><a href="{{ url_for('new_contract_with_type', business_type='采购') }}?contract_type=工程">工程</a></li>
+                            <li><a href="{{ url_for('new_contract_with_type', business_type='采购') }}?contract_type=货物">货物（硬件、软件）</a></li>
+                            <li><a href="{{ url_for('new_contract_with_type', business_type='采购') }}?contract_type=服务">服务</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="{{ url_for('contract_archive', business_type='采购') }}">合同档案</a></li>
+                </ul>
+            </li>
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">销售合同</a>
+                <ul class="submenu" style="display: block;">
+                    <li class="menu-item-expandable active">
+                        <a onclick="toggleSubmenu(this)">新建合同</a>
+                        <ul class="submenu" style="display: block;">
+                            <li><a href="{{ url_for('new_contract_with_type', business_type='销售') }}?contract_type=工程">工程</a></li>
+                            <li><a href="{{ url_for('new_contract_with_type', business_type='销售') }}?contract_type=货物">货物（硬件、软件）</a></li>
+                            <li><a href="{{ url_for('new_contract_with_type', business_type='销售') }}?contract_type=服务">服务</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="{{ url_for('contract_archive', business_type='销售') }}">合同档案</a></li>
+                </ul>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- 左侧弹出菜单 - 客户管理 -->
+    <aside class="sidebar-panel" id="sidebarCustomer">
+        <ul class="sidebar-menu">
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">采购客户管理</a>
+                <ul class="submenu" style="display: block;">
+                    <li><a href="{{ url_for('new_customer_with_type', business_type='采购') }}">新建客户</a></li>
+                    <li><a href="{{ url_for('customer_archive', business_type='采购') }}">客户档案</a></li>
+                </ul>
+            </li>
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">销售客户管理</a>
+                <ul class="submenu" style="display: block;">
+                    <li><a href="{{ url_for('new_customer_with_type', business_type='销售') }}">新建客户</a></li>
+                    <li><a href="{{ url_for('customer_archive', business_type='销售') }}">客户档案</a></li>
+                </ul>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- 左侧弹出菜单 - 产品管理 -->
+    <aside class="sidebar-panel" id="sidebarProduct">
+        <ul class="sidebar-menu">
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">硬件设备</a>
+                <ul class="submenu" style="display: block;">
+                    <li><a href="{{ url_for('new_product_with_type', product_type='硬件设备') }}">新建硬件设备</a></li>
+                    <li><a href="{{ url_for('product_archive', product_type='硬件设备') }}">硬件设备产品档案库</a></li>
+                </ul>
+            </li>
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">软件</a>
+                <ul class="submenu" style="display: block;">
+                    <li><a href="{{ url_for('new_product_with_type', product_type='软件') }}">新建软件产品</a></li>
+                    <li><a href="{{ url_for('product_archive', product_type='软件') }}">软件产品档案库</a></li>
+                </ul>
+            </li>
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">技术服务</a>
+                <ul class="submenu" style="display: block;">
+                    <li><a href="{{ url_for('new_product_with_type', product_type='技术服务') }}">新建技术服务</a></li>
+                    <li><a href="{{ url_for('product_archive', product_type='技术服务') }}">技术服务档案库</a></li>
+                </ul>
+            </li>
+            <li class="menu-item-expandable active">
+                <a onclick="toggleSubmenu(this)">技术开发</a>
+                <ul class="submenu" style="display: block;">
+                    <li><a href="{{ url_for('new_product_with_type', product_type='技术开发') }}">新建技术开发</a></li>
+                    <li><a href="{{ url_for('product_archive', product_type='技术开发') }}">技术开发档案库</a></li>
+                </ul>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+        <div class="container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <script>
+    // 当前打开的侧边栏类型
+    let currentSidebar = null;
+    let currentPageType = null; // 当前页面类型
+
+    // 切换左侧弹出菜单
+    function toggleSidebar(type) {
+        const sidebarContract = document.getElementById('sidebarContract');
+        const sidebarCustomer = document.getElementById('sidebarCustomer');
+        const sidebarProduct = document.getElementById('sidebarProduct');
+        const overlay = document.getElementById('overlay');
+        const contractMenu = document.getElementById('contractMenu');
+        const customerMenu = document.getElementById('customerMenu');
+        const productMenu = document.getElementById('productMenu');
+
+        // 如果点击的是当前已打开的侧边栏，则关闭
+        if (currentSidebar === type) {
+            closeSidebar();
+            return;
+        }
+
+        // 关闭所有侧边栏和菜单高亮
+        sidebarContract.classList.remove('open');
+        sidebarCustomer.classList.remove('open');
+        sidebarProduct.classList.remove('open');
+        if (contractMenu) contractMenu.classList.remove('active');
+        if (customerMenu) customerMenu.classList.remove('active');
+        if (productMenu) productMenu.classList.remove('active');
+
+        // 打开对应的侧边栏
+        if (type === 'contract') {
+            sidebarContract.classList.add('open');
+            if (contractMenu) contractMenu.classList.add('active');
+            currentSidebar = 'contract';
+        } else if (type === 'customer') {
+            sidebarCustomer.classList.add('open');
+            if (customerMenu) customerMenu.classList.add('active');
+            currentSidebar = 'customer';
+        } else if (type === 'product') {
+            sidebarProduct.classList.add('open');
+            if (productMenu) productMenu.classList.add('active');
+            currentSidebar = 'product';
+        }
+
+        overlay.classList.add('show');
+    }
+
+    // 关闭侧边栏
+    function closeSidebar() {
+        document.getElementById('sidebarContract').classList.remove('open');
+        document.getElementById('sidebarCustomer').classList.remove('open');
+        document.getElementById('sidebarProduct').classList.remove('open');
+        document.getElementById('overlay').classList.remove('show');
+        const contractMenu = document.getElementById('contractMenu');
+        const customerMenu = document.getElementById('customerMenu');
+        const productMenu = document.getElementById('productMenu');
+        if (contractMenu) contractMenu.classList.remove('active');
+        if (customerMenu) customerMenu.classList.remove('active');
+        if (productMenu) productMenu.classList.remove('active');
+        currentSidebar = null;
+    }
+
+    // 从浮动按钮显示侧边栏
+    function showSidebarFromButton() {
+        if (currentPageType) {
+            toggleSidebar(currentPageType);
+        }
+    }
+
+    // 切换子菜单
+    function toggleSubmenu(element) {
+        const parent = element.parentElement;
+        parent.classList.toggle('active');
+    }
+
+    // 移动端切换侧边栏（汉堡菜单）
+    function toggleMobileSidebar() {
+        const sidebarContract = document.getElementById('sidebarContract');
+        const overlay = document.getElementById('overlay');
+
+        if (sidebarContract.classList.contains('open')) {
+            closeSidebar();
+        } else {
+            sidebarContract.classList.add('open');
+            overlay.classList.add('show');
+            currentSidebar = 'contract';
+        }
+    }
+
+    // 点击链接后关闭侧边栏
+    document.querySelectorAll('.sidebar-menu a[href]').forEach(link => {
+        link.addEventListener('click', function() {
+            closeSidebar();
+        });
+    });
+
+    // 页面加载时高亮当前页面对应的菜单项，并显示浮动按钮
+    document.addEventListener('DOMContentLoaded', function() {
+        const currentPath = window.location.pathname;
+        const menuLinks = document.querySelectorAll('.sidebar-menu a[href]');
+        const toggleBtn = document.getElementById('sidebarToggleBtn');
+
+        menuLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && currentPath.includes(href.split('?')[0])) {
+                link.style.background = '#34495e';
+                link.style.fontWeight = 'bold';
+            }
+        });
+
+        // 根据当前页面URL判断应该显示哪个侧边栏按钮
+        if (currentPath === '/' || currentPath.includes('/contract')) {
+            currentPageType = 'contract';
+            toggleBtn.classList.add('show');
+            // 高亮顶部菜单
+            const contractMenu = document.getElementById('contractMenu');
+            if (contractMenu) contractMenu.classList.add('active');
+        } else if (currentPath.includes('/customer')) {
+            currentPageType = 'customer';
+            toggleBtn.classList.add('show');
+            const customerMenu = document.getElementById('customerMenu');
+            if (customerMenu) customerMenu.classList.add('active');
+        } else if (currentPath.includes('/product')) {
+            currentPageType = 'product';
+            toggleBtn.classList.add('show');
+            const productMenu = document.getElementById('productMenu');
+            if (productMenu) productMenu.classList.add('active');
+        }
+    });
+    </script>
 </body>
 </html>

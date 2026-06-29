@@ -94,3 +94,7 @@
 
 ※ recap: 正在将本地两次修改（注册/登录功能+跨租户隔离）部署到阿里云服务器，数据库保持不变。下一步：在本地终端执行 scp
   上传 app.py、models.py、templates/register.html、templates/login.html 到服务器。 (disable recaps in /config)
+
+可以通过Workbench连接进行修改
+
+

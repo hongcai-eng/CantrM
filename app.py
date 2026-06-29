@@ -145,7 +145,17 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        customer_id = request.form.get('customer_id', '')
+        customer_id = request.form.get('customer_id', '').strip()
+        customer_name = request.form.get('customer_name', '').strip()
+
+        # 如果提供了customer_id，直接使用
+        # 否则，如果提供了customer_name，通过名称查找customer_id
+        if not customer_id and customer_name:
+            tenant = TenantCustomer.query.filter(
+                (TenantCustomer.company_name == customer_name) | (TenantCustomer.name == customer_name)
+            ).first()
+            if tenant:
+                customer_id = str(tenant.id)
 
         if customer_id:
             user = User.query.filter_by(username=username, customer_id=int(customer_id)).first()
@@ -331,13 +341,33 @@ def index():
         'total_uninvoiced': sum(c.get_uninvoiced_amount() for c in contracts),
     }
 
+    # 新增：分页功能
+    page = request.args.get('page', 1, type=int)  # 当前页码，默认第1页
+    per_page = request.args.get('per_page', 10, type=int)  # 每页显示数量，默认10条
+
+    # 计算总页数
+    total_contracts = len(contracts)
+    total_pages = (total_contracts + per_page - 1) // per_page  # 向上取整
+
+    # 分页切片
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    contracts_page = contracts[start_idx:end_idx]
+
     is_tenant_user = get_current_customer_id() is not None
     current_user = User.query.get(session['user_id'])
     user_permissions = current_user.permissions or ''
-    return render_template('index.html', contracts=contracts, alerts=alerts,
-                           available_years=available_years, stats=stats,
+    return render_template('index.html',
+                           contracts=contracts_page,
+                           alerts=alerts,
+                           available_years=available_years,
+                           stats=stats,
                            is_tenant_user=is_tenant_user,
-                           user_permissions=user_permissions)
+                           user_permissions=user_permissions,
+                           page=page,
+                           per_page=per_page,
+                           total_pages=total_pages,
+                           total_contracts=total_contracts)
 
 
 # ── 新增：合同列表导出 Excel ──
@@ -900,6 +930,67 @@ def delete_user(id):
     return redirect(url_for('users'))
 
 
+# 新增：带业务类型的新建客户路由
+@app.route('/customer/new/<business_type>', methods=['GET', 'POST'])
+@login_required
+@permission_required('增加')
+def new_customer_with_type(business_type):
+    """新建客户（指定业务类型：采购/销售）"""
+    if business_type not in ['采购', '销售']:
+        flash('业务类型错误', 'warning')
+        return redirect(url_for('customers'))
+
+    if request.method == 'POST':
+        customer = Customer(
+            name=request.form['name'],
+            province=request.form.get('province'),
+            region=request.form.get('region'),
+            credit_code=request.form.get('credit_code'),
+            business_type=business_type,
+            customer_id=get_current_customer_id()
+        )
+        db.session.add(customer)
+        db.session.commit()
+        flash(f'{business_type}客户添加成功', 'success')
+        return redirect(url_for('customer_archive', business_type=business_type))
+
+    return render_template('customer_form.html', business_type=business_type)
+
+
+# 新增：客户档案路由（按业务类型筛选）
+@app.route('/customer/archive/<business_type>')
+@login_required
+def customer_archive(business_type):
+    """客户档案（采购/销售）"""
+    if business_type not in ['采购', '销售']:
+        flash('业务类型错误', 'warning')
+        return redirect(url_for('customers'))
+
+    query = Customer.query.filter(Customer.business_type == business_type)
+
+    # 数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        query = query.filter(Customer.customer_id == customer_id)
+
+    # 筛选条件
+    if request.args.get('name'):
+        query = query.filter(Customer.name.like(f"%{request.args.get('name')}%"))
+    if request.args.get('province'):
+        query = query.filter(Customer.province.like(f"%{request.args.get('province')}%"))
+
+    customers_list = query.order_by(Customer.province, Customer.name).all()
+
+    # 获取用户权限
+    user = User.query.get(session['user_id'])
+    user_permissions = user.permissions if user else ''
+
+    return render_template('customer_archive.html',
+                         customers=customers_list,
+                         business_type=business_type,
+                         user_permissions=user_permissions)
+
+
 @app.route('/customers')
 @login_required
 def customers():
@@ -1002,6 +1093,71 @@ def search_project_staff():
                 if name and query.lower() in name.lower():
                     names.add(name)
     return jsonify(sorted(list(names))[:10])
+
+
+# 新增：带产品类型的新建产品路由
+@app.route('/product/new/<product_type>', methods=['GET', 'POST'])
+@login_required
+@permission_required('增加')
+def new_product_with_type(product_type):
+    """新建产品（指定产品类型：硬件设备/软件/技术服务/技术开发）"""
+    valid_types = ['硬件设备', '软件', '技术服务', '技术开发']
+    if product_type not in valid_types:
+        flash('产品类型错误', 'warning')
+        return redirect(url_for('products'))
+
+    if request.method == 'POST':
+        product = Product(
+            name=request.form['name'],
+            category=product_type,  # 使用URL参数指定的产品类型
+            model=request.form.get('model'),
+            unit=request.form.get('unit'),
+            tax_rate=float(request.form['tax_rate']) if request.form.get('tax_rate') else None,
+            ref_quantity=float(request.form['ref_quantity']) if request.form.get('ref_quantity') else None,
+            ref_unit_price=float(request.form['ref_unit_price']) if request.form.get('ref_unit_price') else None,
+            customer_id=get_current_customer_id()
+        )
+        db.session.add(product)
+        db.session.commit()
+        flash(f'{product_type}产品添加成功', 'success')
+        return redirect(url_for('product_archive', product_type=product_type))
+
+    return render_template('product_form.html', product_type=product_type)
+
+
+# 新增：产品档案路由（按产品类型筛选）
+@app.route('/product/archive/<product_type>')
+@login_required
+def product_archive(product_type):
+    """产品档案（硬件设备/软件/技术服务/技术开发）"""
+    valid_types = ['硬件设备', '软件', '技术服务', '技术开发']
+    if product_type not in valid_types:
+        flash('产品类型错误', 'warning')
+        return redirect(url_for('products'))
+
+    query = Product.query.filter(Product.category == product_type)
+
+    # 数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        query = query.filter(Product.customer_id == customer_id)
+
+    # 筛选条件
+    if request.args.get('name'):
+        query = query.filter(Product.name.like(f"%{request.args.get('name')}%"))
+    if request.args.get('model'):
+        query = query.filter(Product.model.like(f"%{request.args.get('model')}%"))
+
+    products_list = query.order_by(Product.name).all()
+
+    # 获取用户权限
+    user = User.query.get(session['user_id'])
+    user_permissions = user.permissions if user else ''
+
+    return render_template('product_archive.html',
+                         products=products_list,
+                         product_type=product_type,
+                         user_permissions=user_permissions)
 
 
 @app.route('/products')
@@ -1361,6 +1517,202 @@ def export_statistics():
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
+# 新增：带业务类型的新建合同路由
+@app.route('/contract/new/<business_type>', methods=['GET', 'POST'])
+@login_required
+@permission_required('增加')
+def new_contract_with_type(business_type):
+    """新建合同（指定业务类型：采购/销售）"""
+    if business_type not in ['采购', '销售']:
+        flash('业务类型错误', 'warning')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        # 获取当前用户的租户ID
+        customer_id = get_current_customer_id()
+
+        # 创建合同主记录
+        contract = Contract(
+            contract_number=request.form.get('contract_number'),
+            customer_name=request.form['customer_name'],
+            project_name=request.form['project_name'],
+            total_price=float(request.form['total_price']),
+            contract_type=request.form.get('contract_type'),
+            project_staff=request.form.get('project_staff'),
+            sales_staff=request.form.get('sales_staff'),
+            business_type=business_type,  # 使用URL参数指定的业务类型
+            signing_date=datetime.strptime(request.form['signing_date'], '%Y-%m-%d').date() if request.form.get('signing_date') else None,
+            customer_id=customer_id,
+            created_by=session.get('username')
+        )
+
+        # 处理合同文件上传
+        if 'contract_file' in request.files:
+            file = request.files['contract_file']
+            if file.filename:
+                filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                contract.file_path = filename
+
+        # 自动同步客户信息
+        if not Customer.query.filter_by(name=contract.customer_name, customer_id=customer_id).first():
+            db.session.add(Customer(name=contract.customer_name, customer_id=customer_id))
+
+        db.session.add(contract)
+        db.session.flush()
+
+        # 处理多产品数据
+        product_names = request.form.getlist('products[product_name][]')
+        contract_types = request.form.getlist('products[contract_type][]')
+        product_types = request.form.getlist('products[product_type][]')
+        models = request.form.getlist('products[model][]')
+        units = request.form.getlist('products[unit][]')
+        quantities = request.form.getlist('products[quantity][]')
+        unit_prices = request.form.getlist('products[unit_price][]')
+        subtotals = request.form.getlist('products[subtotal][]')
+        tax_rates = request.form.getlist('products[tax_rate][]')
+
+        for i in range(len(product_names)):
+            if product_names[i].strip():
+                cp = ContractProduct(
+                    contract_id=contract.id,
+                    product_name=product_names[i].strip() or None,
+                    contract_type=contract_types[i] if i < len(contract_types) else None,
+                    product_type=product_types[i].strip() if i < len(product_types) and product_types[i].strip() else None,
+                    model=models[i].strip() if i < len(models) and models[i].strip() else None,
+                    unit=units[i].strip() if i < len(units) and units[i].strip() else None,
+                    quantity=float(quantities[i]) if i < len(quantities) and quantities[i] else None,
+                    unit_price=float(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else None,
+                    subtotal=float(subtotals[i]) if i < len(subtotals) and subtotals[i] else None,
+                    tax_rate=float(tax_rates[i]) if i < len(tax_rates) and tax_rates[i] else None
+                )
+                db.session.add(cp)
+
+        # 将产品名称同步到产品管理表
+        sync_products_to_table(product_names, models, units, tax_rates, customer_id)
+
+        db.session.commit()
+        flash(f'{business_type}合同创建成功', 'success')
+        return redirect(url_for('contract_archive', business_type=business_type))
+
+    # GET请求：数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        customers_list = Customer.query.filter_by(customer_id=customer_id).order_by(Customer.name).all()
+        products_list = Product.query.filter_by(customer_id=customer_id).order_by(Product.name).all()
+    else:
+        customers_list = Customer.query.order_by(Customer.name).all()
+        products_list = Product.query.order_by(Product.name).all()
+
+    return render_template('contract_form.html',
+                         customers_list=customers_list,
+                         products_list=products_list,
+                         business_type=business_type)
+
+
+# 新增：合同档案路由（按业务类型筛选）
+@app.route('/contract/archive/<business_type>')
+@login_required
+def contract_archive(business_type):
+    """合同档案（采购/销售）"""
+    if business_type not in ['采购', '销售']:
+        flash('业务类型错误', 'warning')
+        return redirect(url_for('index'))
+
+    from sqlalchemy import func
+    query = Contract.query.filter(Contract.business_type == business_type)
+
+    # 数据隔离
+    customer_id = get_current_customer_id()
+    if customer_id is not None:
+        query = query.filter(Contract.customer_id == customer_id)
+
+    # 原有筛选条件
+    if request.args.get('project_staff'):
+        query = query.filter(Contract.project_staff.like(f"%{request.args.get('project_staff')}%"))
+    if request.args.get('customer_name'):
+        query = query.filter(Contract.customer_name.like(f"%{request.args.get('customer_name')}%"))
+
+    # 合同类型筛选
+    if request.args.get('contract_type'):
+        contract_type = request.args.get('contract_type')
+        query = query.join(ContractProduct, Contract.id == ContractProduct.contract_id).filter(
+            ContractProduct.contract_type == contract_type
+        ).distinct()
+
+    if request.args.get('status'):
+        query = query.filter(Contract.status == request.args.get('status'))
+
+    # 签订年份筛选
+    if request.args.get('signing_year'):
+        query = query.filter(func.strftime('%Y', Contract.signing_date) == request.args.get('signing_year'))
+
+    contracts = query.order_by(Contract.created_at.desc()).all()
+
+    # 发票状态筛选
+    if request.args.get('invoice_status'):
+        filtered = []
+        for contract in contracts:
+            has_issued = any(i.invoice_status == '已开具' for i in contract.invoices)
+            if request.args.get('invoice_status') == '已开具' and has_issued:
+                filtered.append(contract)
+            elif request.args.get('invoice_status') == '未开具' and not has_issued:
+                filtered.append(contract)
+        contracts = filtered
+
+    # 预警筛选
+    if request.args.get('alert') == 'yes':
+        contracts = [c for c in contracts if c.get_unpaid_amount() > 0 or c.get_uninvoiced_amount() > 0]
+
+    # 统计数据
+    stats = {
+        'count': len(contracts),
+        'total_price': sum(c.total_price for c in contracts),
+        'total_paid': sum(c.get_total_paid() for c in contracts),
+        'total_unpaid': sum(c.get_unpaid_amount() for c in contracts),
+        'total_invoiced': sum(c.get_total_invoiced() for c in contracts),
+        'total_uninvoiced': sum(c.get_uninvoiced_amount() for c in contracts),
+    }
+
+    # 获取可用年份
+    all_contracts = Contract.query.filter(Contract.business_type == business_type)
+    if customer_id is not None:
+        all_contracts = all_contracts.filter(Contract.customer_id == customer_id)
+    available_years = sorted(set(
+        c.signing_date.year for c in all_contracts.all() if c.signing_date
+    ), reverse=True)
+
+    # 收付款预警
+    alerts = []
+    user = User.query.get(session['user_id'])
+    user_permissions = user.permissions if user else ''
+    is_tenant_user = user.customer_id is not None if user else False
+
+    # 新增：分页功能
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    total_contracts = len(contracts)
+    total_pages = (total_contracts + per_page - 1) // per_page
+
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    contracts_page = contracts[start_idx:end_idx]
+
+    return render_template('contract_archive.html',
+                         contracts=contracts_page,
+                         stats=stats,
+                         available_years=available_years,
+                         alerts=alerts,
+                         user_permissions=user_permissions,
+                         is_tenant_user=is_tenant_user,
+                         business_type=business_type,
+                         page=page,
+                         per_page=per_page,
+                         total_pages=total_pages,
+                         total_contracts=total_contracts)
+
+
 @app.route('/contract/new', methods=['GET', 'POST'])
 @login_required
 @permission_required('增加')
@@ -1472,6 +1824,42 @@ def delete_contract(id):
     db.session.delete(contract)
     db.session.commit()
     flash('合同已删除', 'success')
+    return redirect(url_for('index'))
+
+
+# 新增：批量删除合同
+@app.route('/contract/batch_delete', methods=['POST'])
+@login_required
+@permission_required('删除')
+def batch_delete_contracts():
+    """批量删除合同"""
+    contract_ids = request.form.getlist('contract_ids')
+
+    if not contract_ids:
+        flash('未选择任何合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据隔离检查
+    customer_id = get_current_customer_id()
+
+    deleted_count = 0
+    for contract_id in contract_ids:
+        contract = Contract.query.get(contract_id)
+        if contract:
+            # 检查权限
+            if customer_id is not None and contract.customer_id != customer_id:
+                continue  # 跳过其他租户的合同
+
+            db.session.delete(contract)
+            deleted_count += 1
+
+    db.session.commit()
+
+    if deleted_count > 0:
+        flash(f'成功删除 {deleted_count} 条合同', 'success')
+    else:
+        flash('没有合同被删除', 'warning')
+
     return redirect(url_for('index'))
 
 
@@ -1787,7 +2175,8 @@ def import_contracts():
 
             # 合同级字段向下填充（处理Excel合并单元格导致的NaN）
             fill_cols = ['合同编号', '客户名称', '项目名称', '合同总价', '签订日期',
-                         '合同类型', '业务类型', '项目负责人', '销售人员', '状态', '发票税率']
+                         '合同类型', '业务类型', '项目负责人', '销售人员', '状态', '发票税率',
+                         '已收付款', '未收付款', '已开票', '未开票']
             for col in fill_cols:
                 if col in df.columns:
                     df[col] = df[col].ffill()
@@ -1906,6 +2295,31 @@ def import_contracts():
                                     tax_rate=tax_val,
                                     customer_id=customer_id
                                 ))
+
+                    # 新增：处理已收付款和未收付款
+                    paid_amount = first_row.get('已收付款', 0)
+                    if pd.notna(paid_amount) and float(paid_amount) > 0:
+                        payment = Payment(
+                            contract_id=contract.id,
+                            amount=float(paid_amount),
+                            payment_date=signing_date_val or datetime.now().date(),
+                            payment_type='导入',
+                            note='Excel导入时的已收付款'
+                        )
+                        db.session.add(payment)
+
+                    # 新增：处理已开票和未开票
+                    invoiced_amount = first_row.get('已开票', 0)
+                    if pd.notna(invoiced_amount) and float(invoiced_amount) > 0:
+                        invoice = Invoice(
+                            contract_id=contract.id,
+                            amount=float(invoiced_amount),
+                            received_date=signing_date_val or datetime.now().date(),
+                            invoice_status='已开具',
+                            invoice_type='普票',
+                            note='Excel导入时的已开票'
+                        )
+                        db.session.add(invoice)
 
                     count += 1
                 except Exception as row_err:

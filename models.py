@@ -64,6 +64,8 @@ class Customer(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # 新增：所属租户客户ID
     customer_id = db.Column(db.Integer, db.ForeignKey('tenant_customer.id'), nullable=True)
+    # 新增：业务类型（采购/销售）
+    business_type = db.Column(db.String(20), default='销售')
 
 
 # 产品信息模型 - 新增 customer_id 字段

@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ business_type }}合同档案</h2>
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('new_contract_with_type', business_type=business_type) }}" class="btn btn-primary">新建{{ business_type }}合同</a>
+    {% if user_permissions == 'all' or '导入EXCEL' in user_permissions %}
+    <a href="{{ url_for('import_contracts') }}" class="btn btn-success">导入Excel</a>
+    {% endif %}
+    {% if user_permissions == 'all' or '导出EXCEL' in user_permissions %}
+    <a href="javascript:void(0)" onclick="startExport()" class="btn btn-info">导出Excel</a>
+    {% endif %}
+</div>
+<div id="exportTip" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:30px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:9999;text-align:center;">
+    <div style="font-size:16px;margin-bottom:15px;">⏳ 正在生成Excel，请稍候...</div>
+    <div style="color:#888;font-size:13px;">文件生成后将自动弹出另存为对话框</div>
+</div>
+<div id="exportComplete" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#d4edda;padding:30px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:9999;text-align:center;border-left:4px solid #28a745;">
+    <div style="font-size:16px;margin-bottom:10px;color:#155724;">✓ 下载完成</div>
+    <div style="color:#155724;font-size:13px;">Excel文件已生成，请查看浏览器下载目录</div>
+</div>
+<script>
+function startExport() {
+    document.getElementById('exportTip').style.display = 'block';
+    var url = "{{ url_for('export_contracts') }}?business_type={{ business_type }}&" + window.location.search.substring(1);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){
+        document.getElementById('exportTip').style.display = 'none';
+        document.getElementById('exportComplete').style.display = 'block';
+        setTimeout(function(){
+            document.getElementById('exportComplete').style.display = 'none';
+        }, 3000);
+    }, 2000);
+}
+</script>
+
+<div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+    <form method="GET" action="{{ url_for('contract_archive', business_type=business_type) }}">
+        <div class="form-row">
+            <div class="form-group" style="position:relative;">
+                <label>项目负责人</label>
+                <input type="text" name="project_staff" id="staffSearch" value="{{ request.args.get('project_staff', '') }}" autocomplete="off">
+                <div id="staffSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto; width:100%;"></div>
+            </div>
+            <div class="form-group" style="position:relative;">
+                <label>客户名称</label>
+                <input type="text" name="customer_name" id="customerSearch" value="{{ request.args.get('customer_name', '') }}" autocomplete="off">
+                <div id="customerSearchSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto; width:100%;"></div>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>合同类型</label>
+                <select name="contract_type">
+                    <option value="">全部</option>
+                    <option value="工程" {% if request.args.get('contract_type') == '工程' %}selected{% endif %}>工程</option>
+                    <option value="货物" {% if request.args.get('contract_type') == '货物' %}selected{% endif %}>货物</option>
+                    <option value="服务" {% if request.args.get('contract_type') == '服务' %}selected{% endif %}>服务</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>履约状态</label>
+                <select name="status">
+                    <option value="">全部</option>
+                    <option value="进行中" {% if request.args.get('status') == '进行中' %}selected{% endif %}>进行中</option>
+                    <option value="已完结" {% if request.args.get('status') == '已完结' %}selected{% endif %}>已完结</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>签订年份</label>
+                <select name="signing_year">
+                    <option value="">全部</option>
+                    {% for year in available_years %}
+                    <option value="{{ year }}" {% if request.args.get('signing_year') == year|string %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>发票状态</label>
+                <select name="invoice_status">
+                    <option value="">全部</option>
+                    <option value="已开具" {% if request.args.get('invoice_status') == '已开具' %}selected{% endif %}>已开具</option>
+                    <option value="未开具" {% if request.args.get('invoice_status') == '未开具' %}selected{% endif %}>未开具</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>预警信息</label>
+                <select name="alert">
+                    <option value="">全部</option>
+                    <option value="yes" {% if request.args.get('alert') == 'yes' %}selected{% endif %}>有预警</option>
+                </select>
+            </div>
+            <div class="form-group"></div>
+        </div>
+        <button type="submit" class="btn btn-primary">筛选</button>
+        <a href="{{ url_for('contract_archive', business_type=business_type) }}" class="btn btn-secondary">清除</a>
+    </form>
+</div>
+
+<script>
+// 项目负责人关键词搜索
+const staffInput = document.getElementById('staffSearch');
+const staffSugg = document.getElementById('staffSuggestions');
+let staffTimeout;
+staffInput.addEventListener('input', function() {
+    clearTimeout(staffTimeout);
+    const q = this.value;
+    if (q.length < 1) { staffSugg.style.display = 'none'; return; }
+    staffTimeout = setTimeout(() => {
+        fetch('/api/project_staff/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                if (data.length > 0) {
+                    staffSugg.innerHTML = data.map(s => '<div style="padding:8px;cursor:pointer;" onclick="staffInput.value=\'' + s + '\';staffSugg.style.display=\'none\';">' + s + '</div>').join('');
+                    staffSugg.style.display = 'block';
+                } else { staffSugg.style.display = 'none'; }
+            });
+    }, 300);
+});
+
+// 客户名称关键词搜索
+const custInput = document.getElementById('customerSearch');
+const custSugg = document.getElementById('customerSearchSuggestions');
+let custTimeout;
+custInput.addEventListener('input', function() {
+    clearTimeout(custTimeout);
+    const q = this.value;
+    if (q.length < 1) { custSugg.style.display = 'none'; return; }
+    custTimeout = setTimeout(() => {
+        fetch('/api/customers/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                if (data.length > 0) {
+                    custSugg.innerHTML = data.map(c => '<div style="padding:8px;cursor:pointer;" onclick="custInput.value=\'' + c.name + '\';custSugg.style.display=\'none\';">' + c.name + '</div>').join('');
+                    custSugg.style.display = 'block';
+                } else { custSugg.style.display = 'none'; }
+            });
+    }, 300);
+});
+
+document.addEventListener('click', function(e) {
+    if (!staffInput.contains(e.target)) staffSugg.style.display = 'none';
+    if (!custInput.contains(e.target)) custSugg.style.display = 'none';
+});
+</script>
+
+{% if alerts %}
+<div class="alert alert-warning">
+    <strong>收付款提醒：</strong>
+    {% for alert in alerts %}
+    <div>{{ alert }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- 筛选结果统计汇总 -->
+<div style="background:#e7f3ff;padding:15px;border-radius:4px;margin-bottom:20px;border-left:4px solid #007bff;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:15px;">
+        <div>
+            <div style="color:#666;font-size:13px;">合同数量</div>
+            <div style="font-size:20px;font-weight:bold;color:#333;">{{ stats.count }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">合同总金额</div>
+            <div style="font-size:20px;font-weight:bold;color:#333;">¥{{ "%.2f"|format(stats.total_price) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">已收付款</div>
+            <div style="font-size:20px;font-weight:bold;color:#28a745;">¥{{ "%.2f"|format(stats.total_paid) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">未收付款</div>
+            <div style="font-size:20px;font-weight:bold;color:#dc3545;">¥{{ "%.2f"|format(stats.total_unpaid) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">已开票</div>
+            <div style="font-size:20px;font-weight:bold;color:#28a745;">¥{{ "%.2f"|format(stats.total_invoiced) }}</div>
+        </div>
+        <div>
+            <div style="color:#666;font-size:13px;">未开票</div>
+            <div style="font-size:20px;font-weight:bold;color:#ffc107;">¥{{ "%.2f"|format(stats.total_uninvoiced) }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量操作工具栏 -->
+<div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px; display: flex; align-items: center; gap: 10px;">
+    <input type="checkbox" id="selectAll" onclick="toggleSelectAll()" style="width: 18px; height: 18px; cursor: pointer;">
+    <label for="selectAll" style="margin: 0; cursor: pointer; user-select: none;">全选</label>
+    <span style="margin: 0 10px; color: #999;">|</span>
+    <span id="selectedCount" style="color: #666;">已选择 0 条</span>
+    <span style="margin: 0 10px; color: #999;">|</span>
+    <button onclick="batchView()" class="btn btn-secondary" style="padding: 5px 15px;" disabled id="btnView">查看</button>
+    <button onclick="batchEdit()" class="btn btn-primary" style="padding: 5px 15px;" disabled id="btnEdit">编辑</button>
+    <button onclick="batchDelete()" class="btn btn-danger" style="padding: 5px 15px;" disabled id="btnDelete">删除</button>
+</div>
+
+<div style="overflow-x:auto;">
+<table style="font-size:13px;white-space:nowrap;">
+    <thead>
+        <tr>
+            <th style="width: 40px;"><input type="checkbox" style="display:none;"></th>
+            <th>合同编号</th>
+            <th>项目名称</th>
+            <th>客户名称</th>
+            <th>项目负责人</th>
+            <th>签订日期</th>
+            <th>合同总价</th>
+            <th>未付款</th>
+            <th>未开票</th>
+            <th>合同类型</th>
+            <th>状态</th>
+            {% if is_tenant_user %}<th>用户名</th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for contract in contracts %}
+        <tr>
+            <td><input type="checkbox" class="contract-checkbox" value="{{ contract.id }}" onchange="updateSelectedCount()" style="width: 18px; height: 18px; cursor: pointer;"></td>
+            <td>{{ contract.contract_number or '-' }}</td>
+            <td>{{ contract.project_name }}</td>
+            <td>{{ contract.customer_name }}</td>
+            <td>{{ contract.project_staff or '-' }}</td>
+            <td>{{ contract.signing_date if contract.signing_date else '-' }}</td>
+            <td>¥{{ "%.2f"|format(contract.total_price) }}</td>
+            <td style="color:red;">¥{{ "%.2f"|format(contract.get_unpaid_amount()) }}</td>
+            <td style="color:orange;">¥{{ "%.2f"|format(contract.get_uninvoiced_amount()) }}</td>
+            <td>{{ contract.products | map(attribute='contract_type') | select | unique | join('/') or contract.contract_type or '-' }}</td>
+            <td><span style="{% if contract.status == '已完结' %}color:green;{% else %}color:orange;{% endif %}font-weight:bold;">{{ contract.status }}</span></td>
+            {% if is_tenant_user %}<td>{{ contract.created_by or '-' }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<!-- 分页导航 -->
+<div style="margin-top: 30px; padding: 20px 0; border-top: 1px solid #ddd; display: flex; justify-content: center; align-items: center; gap: 20px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <label style="margin: 0;">每页显示：</label>
+        <select id="perPageSelect" onchange="changePerPage(this.value)" style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="10" {% if per_page == 10 %}selected{% endif %}>10条</option>
+            <option value="20" {% if per_page == 20 %}selected{% endif %}>20条</option>
+            <option value="50" {% if per_page == 50 %}selected{% endif %}>50条</option>
+            <option value="100" {% if per_page == 100 %}selected{% endif %}>100条</option>
+        </select>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 5px;">
+        {% if page > 1 %}
+        <a href="?{{ request.query_string.decode() | replace('page=' ~ page, 'page=1') | replace('&page=' ~ page, '&page=1') }}" class="btn btn-secondary" style="padding: 5px 10px;">首页</a>
+        <a href="?{{ request.query_string.decode() | replace('page=' ~ page, 'page=' ~ (page - 1)) | replace('&page=' ~ page, '&page=' ~ (page - 1)) }}" class="btn btn-secondary" style="padding: 5px 10px;">上一页</a>
+        {% else %}
+        <span class="btn btn-secondary" style="padding: 5px 10px; opacity: 0.5; cursor: not-allowed;">首页</span>
+        <span class="btn btn-secondary" style="padding: 5px 10px; opacity: 0.5; cursor: not-allowed;">上一页</span>
+        {% endif %}
+
+        <span style="padding: 5px 15px; background: #f0f0f0; border-radius: 4px; font-weight: bold;">
+            第 {{ page }} / {{ total_pages }} 页 （共 {{ total_contracts }} 条）
+        </span>
+
+        {% if page < total_pages %}
+        <a href="?{{ request.query_string.decode() | replace('page=' ~ page, 'page=' ~ (page + 1)) | replace('&page=' ~ page, '&page=' ~ (page + 1)) }}" class="btn btn-secondary" style="padding: 5px 10px;">下一页</a>
+        <a href="?{{ request.query_string.decode() | replace('page=' ~ page, 'page=' ~ total_pages) | replace('&page=' ~ page, '&page=' ~ total_pages) }}" class="btn btn-secondary" style="padding: 5px 10px;">末页</a>
+        {% else %}
+        <span class="btn btn-secondary" style="padding: 5px 10px; opacity: 0.5; cursor: not-allowed;">下一页</span>
+        <span class="btn btn-secondary" style="padding: 5px 10px; opacity: 0.5; cursor: not-allowed;">末页</span>
+        {% endif %}
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 5px;">
+        <label style="margin: 0;">跳转到：</label>
+        <input type="number" id="gotoPage" min="1" max="{{ total_pages }}" value="{{ page }}" style="width: 60px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+        <button onclick="gotoPage()" class="btn btn-primary" style="padding: 5px 10px;">GO</button>
+    </div>
+</div>
+
+<script>
+// 批量操作相关函数
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.contract-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.contract-checkbox:checked');
+    const count = checkboxes.length;
+    document.getElementById('selectedCount').textContent = `已选择 ${count} 条`;
+
+    // 更新按钮状态
+    const btnView = document.getElementById('btnView');
+    const btnEdit = document.getElementById('btnEdit');
+    const btnDelete = document.getElementById('btnDelete');
+
+    if (count > 0) {
+        btnView.disabled = false;
+        btnEdit.disabled = count !== 1;
+        btnDelete.disabled = false;
+    } else {
+        btnView.disabled = true;
+        btnEdit.disabled = true;
+        btnDelete.disabled = true;
+    }
+
+    // 更新全选框状态
+    const allCheckboxes = document.querySelectorAll('.contract-checkbox');
+    const selectAll = document.getElementById('selectAll');
+    selectAll.checked = allCheckboxes.length > 0 && count === allCheckboxes.length;
+}
+
+function getSelectedIds() {
+    const checkboxes = document.querySelectorAll('.contract-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+function batchView() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) {
+        alert('请先选择要查看的合同');
+        return;
+    }
+    if (ids.length === 1) {
+        window.location.href = `/contract/${ids[0]}`;
+    } else {
+        alert('查看操作只支持选择一条记录');
+    }
+}
+
+function batchEdit() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) {
+        alert('请先选择要编辑的合同');
+        return;
+    }
+    if (ids.length > 1) {
+        alert('编辑操作只支持选择一条记录');
+        return;
+    }
+    window.location.href = `/contract/${ids[0]}/manage`;
+}
+
+function batchDelete() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) {
+        alert('请先选择要删除的合同');
+        return;
+    }
+
+    const confirmMsg = ids.length === 1
+        ? '确定删除选中的 1 条合同？此操作不可恢复！'
+        : `确定删除选中的 ${ids.length} 条合同？此操作不可恢复！`;
+
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    // 批量删除
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/contract/batch_delete';
+
+    ids.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'contract_ids';
+        input.value = id;
+        form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// 分页相关函数
+function changePerPage(perPage) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('per_page', perPage);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+
+function gotoPage() {
+    const pageNum = document.getElementById('gotoPage').value;
+    const maxPage = {{ total_pages }};
+
+    if (pageNum < 1 || pageNum > maxPage) {
+        alert('请输入有效的页码（1-' + maxPage + '）');
+        return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', pageNum);
+    window.location.href = url.toString();
+}
+
+document.getElementById('gotoPage').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        gotoPage();
+    }
+});
+</script>
+{% endblock %}
