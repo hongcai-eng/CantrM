@@ -174,7 +174,7 @@
         <button class="menu-toggle" onclick="toggleMobileSidebar()">☰</button>
         <div class="logo">
             {% if company_logo_file %}<img src="{{ url_for('static', filename=company_logo_file) }}" alt="logo">{% endif %}
-            {% if company_name %}{{ company_name }}{% endif %} - 合同管理系统
+            {% if company_name %}{{ company_name }} - {% endif %}{{ system_name|default('客户管理系统') }}
         </div>
 
         <!-- 桌面端横向菜单 -->
@@ -439,16 +439,22 @@
             // 高亮顶部菜单
             const contractMenu = document.getElementById('contractMenu');
             if (contractMenu) contractMenu.classList.add('active');
+            // 自动打开合同管理侧边栏
+            toggleSidebar('contract');
         } else if (currentPath.includes('/customer')) {
             currentPageType = 'customer';
             toggleBtn.classList.add('show');
             const customerMenu = document.getElementById('customerMenu');
             if (customerMenu) customerMenu.classList.add('active');
+            // 自动打开客户管理侧边栏
+            toggleSidebar('customer');
         } else if (currentPath.includes('/product')) {
             currentPageType = 'product';
             toggleBtn.classList.add('show');
             const productMenu = document.getElementById('productMenu');
             if (productMenu) productMenu.classList.add('active');
+            // 自动打开产品管理侧边栏
+            toggleSidebar('product');
         }
     });
     </script>

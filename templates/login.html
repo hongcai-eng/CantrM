@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 合同管理系统</title>
+    <title>登录 - {{ system_name|default('客户管理系统') }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -25,7 +25,7 @@
     <div class="login-box">
         <div class="login-header" id="loginHeader">
             {% if company_logo_file %}<img id="brandLogo" src="{{ url_for('static', filename=company_logo_file) }}" alt="logo">{% else %}<img id="brandLogo" src="" alt="logo" style="display:none;">{% endif %}
-            <h1 id="brandName">{% if company_name %}{{ company_name }}<br>{% endif %}合同管理系统</h1>
+            <h1 id="brandName">{% if company_name %}{{ company_name }}<br>{% endif %}{{ system_name|default('客户管理系统') }}</h1>
         </div>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -94,7 +94,7 @@
             } else if (!companyName) {
                 // 恢复默认品牌
                 document.getElementById('brandLogo').style.display = 'none';
-                document.getElementById('brandName').innerHTML = '合同管理系统';
+                document.getElementById('brandName').innerHTML = '{{ system_name|default("客户管理系统") }}';
             }
         });
 
@@ -169,9 +169,9 @@
                 logo.style.display = 'none';
             }
             if (companyName) {
-                nameEl.innerHTML = companyName + '<br>合同管理系统';
+                nameEl.innerHTML = companyName + '<br>{{ system_name|default("客户管理系统") }}';
             } else {
-                nameEl.innerHTML = '合同管理系统';
+                nameEl.innerHTML = '{{ system_name|default("客户管理系统") }}';
             }
         }
 

@@ -3,6 +3,10 @@
 <h2>系统配置</h2>
 <form method="POST" enctype="multipart/form-data">
     <div class="form-group">
+        <label>系统名称</label>
+        <input type="text" name="system_name" value="{{ configs.get('system_name', '客户管理系统') }}" placeholder="客户管理系统">
+    </div>
+    <div class="form-group">
         <label>公司名称</label>
         <input type="text" name="company_name" value="{{ configs.get('company_name', '') }}">
     </div>

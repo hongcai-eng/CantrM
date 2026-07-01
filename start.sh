@@ -18,6 +18,15 @@ if [ ! -f "instance/contracts.db" ]; then
     exit 1
 fi
 
+# 自动升级数据库（兼容旧版本数据库）
+echo "正在检查数据库版本..."
+python upgrade_db.py
+if [ $? -ne 0 ]; then
+    echo "✗ 数据库升级失败"
+    exit 1
+fi
+echo ""
+
 # 启动应用
 echo ""
 echo "=========================================="

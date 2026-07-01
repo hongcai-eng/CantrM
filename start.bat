@@ -21,6 +21,16 @@ if not exist "instance\contracts.db" (
     exit /b 1
 )
 
+REM 自动升级数据库（兼容旧版本数据库）
+echo 正在检查数据库版本...
+python upgrade_db.py
+if errorlevel 1 (
+    echo × 数据库升级失败
+    pause
+    exit /b 1
+)
+echo.
+
 REM 启动应用
 echo.
 echo ==========================================

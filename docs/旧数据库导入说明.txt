@@ -1,0 +1,40 @@
+# 旧数据库导入说明
+
+## 问题
+将旧备份的 `contracts.db` 替换到新系统后出现错误。
+
+## 原因
+新版本添加了新字段，旧数据库缺少这些字段。
+
+## 解决步骤
+
+### 1. 备份当前数据库
+```bash
+cp instance/contracts.db instance/contracts.db.backup
+```
+
+### 2. 替换旧数据库
+将旧的 `contracts.db` 复制到 `instance/` 目录。
+
+### 3. 运行升级脚本
+```bash
+python upgrade_db.py
+```
+
+看到以下输出表示成功：
+```
+开始检测数据库...
+正在添加 tenant_customer.system_name 字段...
+[OK] system_name 字段添加成功
+数据库升级完成！
+```
+
+### 4. 重启应用
+```bash
+python app.py
+```
+
+## 注意
+- **必须先备份**再操作
+- 升级脚本可以重复运行，不会重复添加字段
+- 如遇到问题，恢复备份后联系技术支持

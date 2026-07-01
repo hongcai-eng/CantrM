@@ -33,6 +33,7 @@ class TenantCustomer(db.Model):
     description = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # 新增：每个租户的品牌信息
+    system_name = db.Column(db.String(200))
     company_name = db.Column(db.String(200))
     logo_file = db.Column(db.String(200))
     trial_expires_at = db.Column(db.DateTime, nullable=True)

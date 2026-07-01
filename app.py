@@ -55,6 +55,7 @@ def inject_company():
     # 默认使用全局配置
     company_name = configs.get('company_name', '')
     company_logo_file = configs.get('company_logo_file', '')
+    system_name = configs.get('system_name', '客户管理系统')
 
     # 若当前登录用户属于某租户，优先用租户自己的品牌信息
     try:
@@ -64,6 +65,8 @@ def inject_company():
             if user and user.customer_id:
                 tenant = TenantCustomer.query.get(user.customer_id)
                 if tenant:
+                    if tenant.system_name:
+                        system_name = tenant.system_name
                     if tenant.company_name:
                         company_name = tenant.company_name
                     if tenant.logo_file:
@@ -83,7 +86,7 @@ def inject_company():
     except Exception:
         pass
 
-    return dict(company_name=company_name, company_logo_file=company_logo_file, current_tenant_name=current_tenant_name)
+    return dict(company_name=company_name, company_logo_file=company_logo_file, current_tenant_name=current_tenant_name, system_name=system_name)
 
 
 # ── 辅助：判断当前登录者是否为 superadmin ──
@@ -141,6 +144,12 @@ def permission_required(permission):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # 获取系统配置
+    try:
+        configs = {c.key: c.value for c in SysConfig.query.all()}
+        system_name = configs.get('system_name', '客户管理系统')
+    except Exception:
+        system_name = '客户管理系统'
     tenants = TenantCustomer.query.order_by(TenantCustomer.name).all()
     if request.method == 'POST':
         username = request.form['username']
@@ -168,7 +177,7 @@ def login():
                 tenant = TenantCustomer.query.get(user.customer_id)
                 if tenant and tenant.trial_expires_at and datetime.utcnow() > tenant.trial_expires_at:
                     flash('试用期已结束，请联系管理员续期', 'warning')
-                    return render_template('login.html', tenants=tenants)
+                    return render_template('login.html', tenants=tenants, system_name=system_name)
             session['user_id'] = user.id
             session['username'] = user.username
             session['role'] = user.role
@@ -177,7 +186,7 @@ def login():
                 return redirect(url_for('tenant_management'))
             return redirect(url_for('index'))
         flash('用户名或密码错误', 'warning')
-    return render_template('login.html', tenants=tenants)
+    return render_template('login.html', tenants=tenants, system_name=system_name)
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -2353,29 +2362,60 @@ def sysconfig():
     if session.get('role') != '超级管理员':
         flash('权限不足', 'warning')
         return redirect(url_for('index'))
+
     if request.method == 'POST':
-        for key in ['company_name', 'company_logo']:
-            val = request.form.get(key, '').strip()
-            cfg = SysConfig.query.filter_by(key=key).first()
-            if cfg:
-                cfg.value = val
-            else:
-                db.session.add(SysConfig(key=key, value=val))
-        if 'logo_file' in request.files:
-            f = request.files['logo_file']
-            if f.filename:
-                ext = os.path.splitext(f.filename)[1]
-                logo_filename = f'company_logo{ext}'
-                f.save(os.path.join('static', logo_filename))
-                cfg = SysConfig.query.filter_by(key='company_logo_file').first()
+        # superadmin 保存到全局配置，租户超管保存到租户配置
+        if session.get('username') == 'superadmin':
+            # superadmin 保存全局配置
+            for key in ['system_name', 'company_name', 'company_logo']:
+                val = request.form.get(key, '').strip()
+                cfg = SysConfig.query.filter_by(key=key).first()
                 if cfg:
-                    cfg.value = logo_filename
+                    cfg.value = val
                 else:
-                    db.session.add(SysConfig(key='company_logo_file', value=logo_filename))
+                    db.session.add(SysConfig(key=key, value=val))
+            if 'logo_file' in request.files:
+                f = request.files['logo_file']
+                if f.filename:
+                    ext = os.path.splitext(f.filename)[1]
+                    logo_filename = f'company_logo{ext}'
+                    f.save(os.path.join('static', logo_filename))
+                    cfg = SysConfig.query.filter_by(key='company_logo_file').first()
+                    if cfg:
+                        cfg.value = logo_filename
+                    else:
+                        db.session.add(SysConfig(key='company_logo_file', value=logo_filename))
+        else:
+            # 租户超管保存到租户配置
+            user = User.query.get(session['user_id'])
+            if user and user.customer_id:
+                tenant = TenantCustomer.query.get(user.customer_id)
+                if tenant:
+                    tenant.system_name = request.form.get('system_name', '').strip()
+                    tenant.company_name = request.form.get('company_name', '').strip()
+                    if 'logo_file' in request.files:
+                        f = request.files['logo_file']
+                        if f.filename:
+                            ext = os.path.splitext(f.filename)[1]
+                            logo_filename = f'tenant_{tenant.id}_logo{ext}'
+                            f.save(os.path.join('static', logo_filename))
+                            tenant.logo_file = logo_filename
         db.session.commit()
         flash('配置保存成功', 'success')
         return redirect(url_for('sysconfig'))
-    configs = {c.key: c.value for c in SysConfig.query.all()}
+
+    # 读取配置：superadmin 读全局，租户超管读租户配置
+    configs = {}
+    if session.get('username') == 'superadmin':
+        configs = {c.key: c.value for c in SysConfig.query.all()}
+    else:
+        user = User.query.get(session['user_id'])
+        if user and user.customer_id:
+            tenant = TenantCustomer.query.get(user.customer_id)
+            if tenant:
+                configs['system_name'] = tenant.system_name or ''
+                configs['company_name'] = tenant.company_name or ''
+                configs['company_logo_file'] = tenant.logo_file or ''
     return render_template('sysconfig.html', configs=configs)
 
 
