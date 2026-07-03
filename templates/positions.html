@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>岗位管理</h2>
+<p style="color:#888;margin-bottom:20px;">管理本租户的岗位模板，为岗位配置权限并分配给用户</p>
+
+<button onclick="showCreateForm()" class="btn btn-primary" style="margin-bottom:20px;">+ 新建岗位</button>
+
+<!-- 新建岗位表单 -->
+<div id="createPositionForm" style="display:none;background:#f8f9fa;padding:20px;border-radius:4px;margin-bottom:20px;">
+    <h3>新建岗位</h3>
+    <form method="POST" action="{{ url_for('create_position') }}">
+        <div class="form-group">
+            <label>岗位名称*</label>
+            <input type="text" name="name" required placeholder="如：项目经理、技术负责人">
+        </div>
+        <div class="form-group">
+            <label>描述</label>
+            <textarea name="description" placeholder="岗位职责描述"></textarea>
+        </div>
+        <div class="form-group">
+            <label>功能权限</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:4px;">
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="增加"> 增加</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="删除"> 删除</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="修改"> 修改</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="查阅"> 查阅</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="上传"> 上传</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="下载"> 下载</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="导入EXCEL"> 导入EXCEL</label>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="导出EXCEL"> 导出EXCEL</label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>数据权限范围</label>
+            <select name="data_scope">
+                <option value="all">全部合同</option>
+                <option value="org">本组织合同</option>
+                <option value="self">仅自己创建的合同</option>
+                <option value="custom">自定义（需手动授权）</option>
+            </select>
+            <div style="color:#888;font-size:12px;margin-top:4px;">控制该岗位可以访问哪些合同数据</div>
+        </div>
+        <button type="submit" class="btn btn-success">创建</button>
+        <button type="button" onclick="document.getElementById('createPositionForm').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+</div>
+
+<!-- 岗位列表 -->
+<h3>岗位列表</h3>
+<table>
+    <thead>
+        <tr>
+            <th>岗位名称</th>
+            <th>描述</th>
+            <th>功能权限</th>
+            <th>数据权限</th>
+            <th>人员数</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for position in positions %}
+        <tr>
+            <td><strong>{{ position.name }}</strong></td>
+            <td>{{ position.description or '-' }}</td>
+            <td><small>{{ position.function_permissions or '无' }}</small></td>
+            <td>
+                {% if position.data_scope == 'all' %}全部合同
+                {% elif position.data_scope == 'org' %}本组织合同
+                {% elif position.data_scope == 'self' %}仅自己创建
+                {% elif position.data_scope == 'custom' %}自定义
+                {% else %}-
+                {% endif %}
+            </td>
+            <td>
+                {% set up_count = namespace(value=0) %}
+                {% for up in [] %}{% endfor %}
+                {{ up_count.value }}
+            </td>
+            <td>
+                <button onclick="showEditForm({{ position.id }}, '{{ position.name }}', '{{ position.description or '' }}', '{{ position.function_permissions or '' }}', '{{ position.data_scope }}')" class="btn btn-primary" style="padding:2px 8px;font-size:12px;">编辑</button>
+                <button onclick="showAssignUserForm({{ position.id }}, '{{ position.name }}')" class="btn btn-success" style="padding:2px 8px;font-size:12px;">分配用户</button>
+                {% if position.data_scope == 'custom' %}
+                <button onclick="showGrantContractForm({{ position.id }}, '{{ position.name }}')" class="btn btn-info" style="padding:2px 8px;font-size:12px;">授权合同</button>
+                {% endif %}
+                <form method="POST" action="{{ url_for('delete_position', position_id=position.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该岗位？')">删除</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- 用户岗位明细 -->
+<h3 style="margin-top:40px;">用户岗位明细</h3>
+<table>
+    <thead>
+        <tr>
+            <th>用户</th>
+            <th>岗位列表</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.username }} ({{ user.role }})</td>
+            <td>
+                {% set user_positions = [] %}
+                {% for position in positions %}
+                    {% for up in [] %}{% endfor %}
+                {% endfor %}
+                {% if user_positions %}
+                    {% for up in user_positions %}
+                    <span style="display:inline-block;background:#e7f3ff;padding:4px 8px;margin:2px;border-radius:3px;">
+                        {{ up.position.name }}
+                        {% if up.organization %} @ {{ up.organization.name }}{% endif %}
+                        {% if up.is_primary %}<strong>(主)</strong>{% endif %}
+                    </span>
+                    {% endfor %}
+                {% else %}
+                    <span style="color:#999;">暂无岗位</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- 编辑岗位弹窗 -->
+<div id="editPositionModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;overflow-y:auto;">
+    <div style="background:white;width:600px;margin:50px auto;padding:30px;border-radius:8px;">
+        <h3>编辑岗位</h3>
+        <form method="POST" id="editPositionForm">
+            <div class="form-group">
+                <label>岗位名称*</label>
+                <input type="text" name="name" id="editPositionName" required>
+            </div>
+            <div class="form-group">
+                <label>描述</label>
+                <textarea name="description" id="editPositionDesc"></textarea>
+            </div>
+            <div class="form-group">
+                <label>功能权限</label>
+                <div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:4px;">
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="增加" id="editPerm_增加"> 增加</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="删除" id="editPerm_删除"> 删除</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="修改" id="editPerm_修改"> 修改</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="查阅" id="editPerm_查阅"> 查阅</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="上传" id="editPerm_上传"> 上传</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="下载" id="editPerm_下载"> 下载</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="导入EXCEL" id="editPerm_导入EXCEL"> 导入EXCEL</label>
+                    <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="function_permissions" value="导出EXCEL" id="editPerm_导出EXCEL"> 导出EXCEL</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>数据权限范围</label>
+                <select name="data_scope" id="editDataScope">
+                    <option value="all">全部合同</option>
+                    <option value="org">本组织合同</option>
+                    <option value="self">仅自己创建的合同</option>
+                    <option value="custom">自定义（需手动授权）</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-success">保存</button>
+            <button type="button" onclick="document.getElementById('editPositionModal').style.display='none'" class="btn btn-secondary">取消</button>
+        </form>
+    </div>
+</div>
+
+<!-- 分配用户弹窗 -->
+<div id="assignUserModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;">
+    <div style="background:white;width:500px;margin:100px auto;padding:30px;border-radius:8px;">
+        <h3>分配用户到岗位: <span id="assignPositionName"></span></h3>
+        <form method="POST" id="assignUserForm">
+            <div class="form-group">
+                <label>选择用户*</label>
+                <select name="user_id" required>
+                    <option value="">-- 选择用户 --</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.username }} ({{ user.role }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>所属组织</label>
+                <select name="organization_id">
+                    <option value="">-- 不限组织 --</option>
+                    {% for org in organizations %}
+                    <option value="{{ org.id }}">{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+                <div style="color:#888;font-size:12px;margin-top:4px;">指定用户在哪个组织担任此岗位</div>
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:4px;">
+                    <input type="checkbox" name="is_primary"> 设为主岗位
+                </label>
+                <div style="color:#888;font-size:12px;margin-top:4px;">用户的主岗位权限优先生效</div>
+            </div>
+            <button type="submit" class="btn btn-success">分配</button>
+            <button type="button" onclick="document.getElementById('assignUserModal').style.display='none'" class="btn btn-secondary">取消</button>
+        </form>
+    </div>
+</div>
+
+<!-- 授权合同弹窗 -->
+<div id="grantContractModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;overflow-y:auto;">
+    <div style="background:white;width:600px;margin:50px auto;padding:30px;border-radius:8px;">
+        <h3>为岗位授权合同: <span id="grantPositionName"></span></h3>
+        <form method="POST" id="grantContractForm">
+            <div class="form-group">
+                <label>选择合同*</label>
+                <select name="contract_id" required style="width:100%;">
+                    <option value="">-- 选择合同 --</option>
+                    {% for contract in contracts %}
+                    <option value="{{ contract.id }}">{{ contract.contract_number }} - {{ contract.project_name }} ({{ contract.customer_name }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>权限类型*</label>
+                <select name="permission_type" required>
+                    <option value="view">查看</option>
+                    <option value="edit">编辑</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-success">授权</button>
+            <button type="button" onclick="document.getElementById('grantContractModal').style.display='none'" class="btn btn-secondary">取消</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function showCreateForm() {
+    document.getElementById('createPositionForm').style.display = 'block';
+}
+
+function showEditForm(positionId, name, desc, perms, dataScope) {
+    document.getElementById('editPositionName').value = name;
+    document.getElementById('editPositionDesc').value = desc;
+    document.getElementById('editDataScope').value = dataScope;
+    document.getElementById('editPositionForm').action = '/position/' + positionId + '/edit';
+
+    var permList = perms ? perms.split(',') : [];
+    ['增加','删除','修改','查阅','上传','下载','导入EXCEL','导出EXCEL'].forEach(function(p) {
+        var checkbox = document.getElementById('editPerm_' + p);
+        if (checkbox) {
+            checkbox.checked = permList.indexOf(p) >= 0;
+        }
+    });
+
+    document.getElementById('editPositionModal').style.display = 'block';
+}
+
+function showAssignUserForm(positionId, positionName) {
+    document.getElementById('assignPositionName').textContent = positionName;
+    document.getElementById('assignUserForm').action = '/position/' + positionId + '/assign_user';
+    document.getElementById('assignUserModal').style.display = 'block';
+}
+
+function showGrantContractForm(positionId, positionName) {
+    document.getElementById('grantPositionName').textContent = positionName;
+    document.getElementById('grantContractForm').action = '/position/' + positionId + '/grant_contract';
+    document.getElementById('grantContractModal').style.display = 'block';
+}
+</script>
+{% endblock %}

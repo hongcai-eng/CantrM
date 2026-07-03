@@ -27,6 +27,12 @@
             </select>
         </div>
         <div class="form-group">
+            <label style="display:flex;align-items:center;gap:4px;">
+                <input type="checkbox" name="is_virtual"> 虚拟组织（跨部门项目组）
+            </label>
+            <div style="color:#888;font-size:12px;margin-top:4px;">虚拟组织用于临时项目，可包含多个部门的人员</div>
+        </div>
+        <div class="form-group">
             <label>权限管理</label>
             <div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:4px;">
                 <label style="display:flex;align-items:center;gap:4px;font-weight:normal;"><input type="checkbox" name="permissions" value="增加"> 增加</label>
@@ -59,22 +65,31 @@
         </tr>
     </thead>
     <tbody>
-        {% for org in organizations %}
+        {% macro render_org(org, level=0) %}
         <tr>
-            <td style="{% if org.parent_id %}padding-left:30px;{% endif %}">
-                {% if org.parent_id %}└─ {% endif %}{{ org.name }}
+            <td style="padding-left:{{ level * 30 }}px;">
+                {% if level > 0 %}└─ {% endif %}
+                {% if org.is_virtual %}<span style="color:#ff9800;font-weight:bold;">[虚拟] </span>{% endif %}
+                {{ org.name }}
             </td>
             <td>{{ org.description or '-' }}</td>
             <td>{{ org.parent.name if org.parent else '-' }}</td>
             <td>{{ org.members|length }}</td>
             <td>{{ org.created_at.strftime('%Y-%m-%d') }}</td>
             <td>
-                <button onclick="showEditForm({{ org.id }}, '{{ org.name }}', '{{ org.description or '' }}', {{ org.parent_id or 'null' }}, '{{ org.permissions or '' }}')" class="btn btn-primary">编辑</button>
+                <button onclick="showEditForm({{ org.id }}, '{{ org.name }}', '{{ org.description or '' }}', {{ org.parent_id or 'null' }}, '{{ org.permissions or '' }}', {{ 'true' if org.is_virtual else 'false' }})" class="btn btn-primary">编辑</button>
                 <form method="POST" action="{{ url_for('delete_organization', org_id=org.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除该组织？')">删除</button>
                 </form>
             </td>
         </tr>
+        {% for child in organizations if child.parent_id == org.id %}
+            {{ render_org(child, level + 1) }}
+        {% endfor %}
+        {% endmacro %}
+
+        {% for org in organizations if not org.parent_id %}
+            {{ render_org(org, 0) }}
         {% endfor %}
     </tbody>
 </table>
@@ -100,6 +115,11 @@
                     <option value="{{ org.id }}">{{ org.name }}</option>
                     {% endfor %}
                 </select>
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:4px;">
+                    <input type="checkbox" name="is_virtual" id="editOrgVirtual"> 虚拟组织（跨部门项目组）
+                </label>
             </div>
             <div class="form-group">
                 <label>权限管理</label>
@@ -181,10 +201,11 @@ function showCreateForm() {
     document.getElementById('createOrgForm').style.display = 'block';
 }
 
-function showEditForm(orgId, name, desc, parentId, perms) {
+function showEditForm(orgId, name, desc, parentId, perms, isVirtual) {
     document.getElementById('editOrgName').value = name;
     document.getElementById('editOrgDesc').value = desc;
     document.getElementById('editOrgParent').value = parentId || '';
+    document.getElementById('editOrgVirtual').checked = isVirtual;
     document.getElementById('editOrgForm').action = '/organization/' + orgId + '/edit';
     var permList = perms ? perms.split(',') : [];
     ['增加','删除','修改','查阅','上传','下载','导入EXCEL','导出EXCEL'].forEach(function(p) {

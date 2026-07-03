@@ -4,7 +4,7 @@ from functools import wraps
 import os
 import io
 import pandas as pd
-from models import db, User, TenantCustomer, Organization, Customer, Product, Contract, ContractProduct, Payment, Delivery, Invoice, SysConfig
+from models import db, User, TenantCustomer, Organization, Customer, Product, Contract, ContractProduct, Payment, Delivery, Invoice, SysConfig, Position, UserPosition, PositionContractPermission, UserOrganization
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
@@ -112,6 +112,214 @@ def is_customer_admin():
     return user and user.role == '超级管理员' and user.customer_id is not None
 
 
+# ── 新增：功能权限计算辅助函数 ──
+def get_user_function_permissions(user_id):
+    """
+    获取用户的综合功能权限（用户自身权限 + 岗位权限合并）
+    返回：权限列表或 'all'
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return []
+
+    # 超级管理员拥有全部权限
+    if user.role == '超级管理员' or user.permissions == 'all':
+        return 'all'
+
+    # 收集所有权限
+    permissions = set()
+
+    # 1. 用户自身的权限
+    if user.permissions:
+        if user.permissions == 'all':
+            return 'all'
+        permissions.update(user.permissions.split(','))
+
+    # 2. 用户岗位的功能权限
+    user_positions = UserPosition.query.filter_by(user_id=user_id).all()
+    for up in user_positions:
+        position = Position.query.get(up.position_id)
+        if position and position.function_permissions:
+            position_perms = position.function_permissions.split(',')
+            permissions.update(position_perms)
+
+    return list(permissions)
+
+
+def has_permission(user_id, permission):
+    """
+    检查用户是否拥有指定的功能权限
+    参数：
+        user_id: 用户ID
+        permission: 权限名称（如 '增加', '删除', '修改', '查阅'）
+    返回：True/False
+    """
+    permissions = get_user_function_permissions(user_id)
+
+    # 'all' 表示拥有所有权限
+    if permissions == 'all':
+        return True
+
+    # 检查是否在权限列表中
+    return permission in permissions
+
+
+def has_permission_for_contract(user_id, permission, contract):
+    """
+    检查用户是否对特定合同拥有指定的功能权限
+    项目负责人自动拥有该合同的所有权限
+
+    参数：
+        user_id: 用户ID
+        permission: 权限名称（如 '增加', '删除', '修改', '查阅'）
+        contract: 合同对象
+    返回：True/False
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return False
+
+    # 检查是否是该合同的项目负责人
+    if contract and contract.project_staff and user.username in contract.project_staff:
+        # 项目负责人拥有该合同的所有操作权限
+        return True
+
+    # 否则检查常规权限
+    return has_permission(user_id, permission)
+
+
+def get_user_permissions_string(user_id):
+    """
+    获取用户权限的字符串表示（用于传递给模板）
+    返回：'all' 或逗号分隔的权限列表
+    """
+    permissions = get_user_function_permissions(user_id)
+
+    if permissions == 'all':
+        return 'all'
+
+    # 返回逗号分隔的权限字符串
+    return ','.join(permissions) if permissions else ''
+
+
+# ── 新增：数据权限计算辅助函数 ──
+def get_user_data_scope(user_id):
+    """
+    计算用户的综合数据权限范围
+    返回：'all' | 'org' | 'custom' | 'self'
+    优先级：all > org > custom > self
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return 'self'
+
+    # 超级管理员拥有全部权限
+    if user.role == '超级管理员' or user.permissions == 'all':
+        return 'all'
+
+    # 查询用户的所有岗位
+    user_positions = UserPosition.query.filter_by(user_id=user_id).all()
+    if not user_positions:
+        return 'self'  # 没有岗位时，默认只能看自己创建的
+
+    # 获取所有岗位的数据权限范围
+    scopes = []
+    for up in user_positions:
+        position = Position.query.get(up.position_id)
+        if position:
+            scopes.append(position.data_scope)
+
+    # 按优先级返回最宽松的权限
+    if 'all' in scopes:
+        return 'all'
+    if 'org' in scopes:
+        return 'org'
+    if 'custom' in scopes:
+        return 'custom'
+    return 'self'
+
+
+def get_user_accessible_contract_ids(user_id, customer_id):
+    """
+    获取用户可访问的合同ID列表
+    参数：
+        user_id: 用户ID
+        customer_id: 租户ID
+    返回：合同ID列表，如果返回 None 表示可访问所有合同
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return []
+
+    # 超级管理员可访问所有合同
+    if user.role == '超级管理员' or user.permissions == 'all':
+        return None  # None 表示全部
+
+    data_scope = get_user_data_scope(user_id)
+
+    # 全部合同权限
+    if data_scope == 'all':
+        return None  # None 表示全部
+
+    # 本组织合同权限
+    if data_scope == 'org':
+        # 获取用户所属的所有组织
+        user_orgs = UserOrganization.query.filter_by(user_id=user_id).all()
+        org_ids = [uo.organization_id for uo in user_orgs]
+
+        if not org_ids:
+            # 如果用户没有分配组织，则只能看自己创建的和负责的合同
+            own_contracts = Contract.query.filter(
+                Contract.customer_id == customer_id,
+                db.or_(
+                    Contract.created_by == user_id,
+                    Contract.project_staff.like(f'%{user.username}%')
+                )
+            ).all()
+            return [c.id for c in own_contracts]
+
+        # 返回用户所属组织的所有合同
+        return [c.id for c in Contract.query.filter(
+            Contract.customer_id == customer_id,
+            Contract.organization_id.in_(org_ids)
+        ).all()]
+
+    # 自定义权限
+    if data_scope == 'custom':
+        # 获取用户所有岗位被授权的合同
+        user_positions = UserPosition.query.filter_by(user_id=user_id).all()
+        position_ids = [up.position_id for up in user_positions]
+
+        # 查询这些岗位被授权的合同
+        permissions = PositionContractPermission.query.filter(
+            PositionContractPermission.position_id.in_(position_ids)
+        ).all()
+
+        contract_ids = list(set([p.contract_id for p in permissions]))
+
+        # 自定义权限的用户也能看到自己创建的和负责的合同
+        own_contracts = Contract.query.filter(
+            Contract.customer_id == customer_id,
+            db.or_(
+                Contract.created_by == user_id,
+                Contract.project_staff.like(f'%{user.username}%')
+            )
+        ).all()
+        own_contract_ids = [c.id for c in own_contracts]
+
+        return list(set(contract_ids + own_contract_ids))
+
+    # 仅自己创建的合同和负责的合同
+    own_contracts = Contract.query.filter(
+        Contract.customer_id == customer_id,
+        db.or_(
+            Contract.created_by == user_id,
+            Contract.project_staff.like(f'%{user.username}%')
+        )
+    ).all()
+    return [c.id for c in own_contracts]
+
+
 # 登录验证装饰器
 def login_required(f):
     @wraps(f)
@@ -131,11 +339,13 @@ def permission_required(permission):
             if 'user_id' not in session:
                 flash('请先登录', 'warning')
                 return redirect(url_for('login'))
-            user = User.query.get(session['user_id'])
-            if user.role == '超级管理员' or user.permissions == 'all':
+
+            user_id = session['user_id']
+
+            # 使用新的权限检查函数（整合用户自身权限 + 岗位权限）
+            if has_permission(user_id, permission):
                 return f(*args, **kwargs)
-            if user.permissions and permission in user.permissions:
-                return f(*args, **kwargs)
+
             flash('你没有此项权限，请与管理员联系', 'warning')
             return redirect(url_for('index'))
         return decorated_function
@@ -282,6 +492,36 @@ def index():
     if customer_id is not None:
         query = query.filter(Contract.customer_id == customer_id)
 
+    # 新增：数据权限过滤
+    user_id = session.get('user_id')
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        # None 表示可访问所有合同，不需要过滤
+        if accessible_ids is not None:
+            if not accessible_ids:
+                # 空列表表示没有可访问的合同
+                user = User.query.get(user_id)
+                return render_template('index.html',
+                                     contracts=[],
+                                     available_years=[],
+                                     alerts=[],
+                                     stats={
+                                         'total_contracts': 0,
+                                         'total_price': 0,
+                                         'total_paid': 0,
+                                         'total_unpaid': 0,
+                                         'total_invoiced': 0,
+                                         'total_uninvoiced': 0
+                                     },
+                                     page=1,
+                                     per_page=10,
+                                     total_pages=0,
+                                     user_permissions=get_user_permissions_string(user_id),
+                                     is_tenant_user=user.customer_id is not None if user else False)
+            else:
+                # 过滤可访问的合同
+                query = query.filter(Contract.id.in_(accessible_ids))
+
     # 原有筛选条件
     if request.args.get('project_staff'):
         query = query.filter(Contract.project_staff.like(f"%{request.args.get('project_staff')}%"))
@@ -364,8 +604,7 @@ def index():
     contracts_page = contracts[start_idx:end_idx]
 
     is_tenant_user = get_current_customer_id() is not None
-    current_user = User.query.get(session['user_id'])
-    user_permissions = current_user.permissions or ''
+    user_permissions = get_user_permissions_string(session['user_id'])
     return render_template('index.html',
                            contracts=contracts_page,
                            alerts=alerts,
@@ -390,6 +629,20 @@ def export_contracts():
     customer_id = get_current_customer_id()
     if customer_id is not None:
         query = query.filter(Contract.customer_id == customer_id)
+
+    # 数据权限过滤
+    user_id = session.get('user_id')
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        # None 表示可访问所有合同，不需要过滤
+        if accessible_ids is not None:
+            if not accessible_ids:
+                # 空列表表示没有可访问的合同，返回空Excel
+                flash('没有可导出的合同数据', 'warning')
+                return redirect(url_for('index'))
+            else:
+                # 过滤可访问的合同
+                query = query.filter(Contract.id.in_(accessible_ids))
 
     if request.args.get('project_staff'):
         query = query.filter(Contract.project_staff.like(f"%{request.args.get('project_staff')}%"))
@@ -715,6 +968,7 @@ def create_organization():
     name = request.form['name']
     description = request.form.get('description', '')
     parent_id = request.form.get('parent_id')
+    is_virtual = request.form.get('is_virtual') == 'on'  # 虚拟组织复选框
 
     if parent_id and parent_id.strip():
         parent_id = int(parent_id)
@@ -727,12 +981,14 @@ def create_organization():
         description=description,
         parent_id=parent_id,
         customer_id=customer_id,
-        permissions=','.join(selected_perms) if selected_perms else None
+        permissions=','.join(selected_perms) if selected_perms else None,
+        is_virtual=is_virtual
     )
     db.session.add(org)
     db.session.commit()
 
-    flash(f'组织"{name}"创建成功', 'success')
+    org_type = '虚拟组织' if is_virtual else '组织'
+    flash(f'{org_type}"{name}"创建成功', 'success')
     return redirect(url_for('organizations'))
 
 
@@ -755,6 +1011,7 @@ def edit_organization(org_id):
     org.name = request.form['name']
     org.description = request.form.get('description', '')
     parent_id = request.form.get('parent_id')
+    org.is_virtual = request.form.get('is_virtual') == 'on'  # 虚拟组织复选框
 
     if parent_id and parent_id.strip():
         org.parent_id = int(parent_id)
@@ -939,6 +1196,227 @@ def delete_user(id):
     return redirect(url_for('users'))
 
 
+# ==================== 岗位管理 ====================
+
+@app.route('/positions')
+@login_required
+def positions():
+    """岗位管理列表（客户超级管理员可访问）"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    if customer_id is None:
+        flash('superadmin 无需管理岗位', 'warning')
+        return redirect(url_for('index'))
+
+    # 获取当前租户的所有岗位
+    positions = Position.query.filter_by(customer_id=customer_id).order_by(Position.created_at).all()
+
+    # 获取当前租户的所有合同（用于岗位赋权）
+    contracts = Contract.query.filter_by(customer_id=customer_id).all()
+
+    # 获取当前租户的所有组织
+    organizations = Organization.query.filter_by(customer_id=customer_id).all()
+
+    # 获取当前租户的所有用户
+    users = User.query.filter_by(customer_id=customer_id).all()
+
+    return render_template('positions.html', positions=positions, contracts=contracts,
+                         organizations=organizations, users=users)
+
+
+@app.route('/position/create', methods=['POST'])
+@login_required
+def create_position():
+    """创建岗位"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    if customer_id is None:
+        flash('superadmin 无需创建岗位', 'warning')
+        return redirect(url_for('index'))
+
+    name = request.form['name']
+    description = request.form.get('description', '')
+    data_scope = request.form.get('data_scope', 'all')
+
+    selected_perms = request.form.getlist('function_permissions')
+
+    position = Position(
+        name=name,
+        description=description,
+        customer_id=customer_id,
+        function_permissions=','.join(selected_perms) if selected_perms else None,
+        data_scope=data_scope
+    )
+    db.session.add(position)
+    db.session.commit()
+
+    flash(f'岗位"{name}"创建成功', 'success')
+    return redirect(url_for('positions'))
+
+
+@app.route('/position/<int:position_id>/edit', methods=['POST'])
+@login_required
+def edit_position(position_id):
+    """编辑岗位"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    position = Position.query.get_or_404(position_id)
+
+    # 验证权限：只能编辑自己租户的岗位
+    if position.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('positions'))
+
+    position.name = request.form['name']
+    position.description = request.form.get('description', '')
+    position.data_scope = request.form.get('data_scope', 'all')
+
+    selected_perms = request.form.getlist('function_permissions')
+    position.function_permissions = ','.join(selected_perms) if selected_perms else None
+
+    db.session.commit()
+    flash(f'岗位"{position.name}"已更新', 'success')
+    return redirect(url_for('positions'))
+
+
+@app.route('/position/<int:position_id>/delete', methods=['POST'])
+@login_required
+def delete_position(position_id):
+    """删除岗位"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    position = Position.query.get_or_404(position_id)
+
+    # 验证权限：只能删除自己租户的岗位
+    if position.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('positions'))
+
+    # 删除关联的用户岗位和权限
+    UserPosition.query.filter_by(position_id=position_id).delete()
+    PositionContractPermission.query.filter_by(position_id=position_id).delete()
+
+    db.session.delete(position)
+    db.session.commit()
+    flash(f'岗位"{position.name}"已删除', 'success')
+    return redirect(url_for('positions'))
+
+
+@app.route('/position/<int:position_id>/assign_user', methods=['POST'])
+@login_required
+def assign_user_to_position(position_id):
+    """为用户分配岗位"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    position = Position.query.get_or_404(position_id)
+
+    if position.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('positions'))
+
+    user_id = int(request.form['user_id'])
+    org_id = request.form.get('organization_id')
+    org_id = int(org_id) if org_id and org_id.strip() else None
+    is_primary = request.form.get('is_primary') == 'on'
+
+    # 检查是否已存在
+    existing = UserPosition.query.filter_by(user_id=user_id, position_id=position_id, organization_id=org_id).first()
+    if existing:
+        flash('该用户已拥有此岗位', 'warning')
+        return redirect(url_for('positions'))
+
+    # 如果设置为主岗位，清除该用户的其他主岗位
+    if is_primary:
+        UserPosition.query.filter_by(user_id=user_id, is_primary=True).update({'is_primary': False})
+
+    user_position = UserPosition(
+        user_id=user_id,
+        position_id=position_id,
+        organization_id=org_id,
+        is_primary=is_primary
+    )
+    db.session.add(user_position)
+    db.session.commit()
+
+    user = User.query.get(user_id)
+    flash(f'已为用户"{user.username}"分配岗位"{position.name}"', 'success')
+    return redirect(url_for('positions'))
+
+
+@app.route('/position/<int:position_id>/grant_contract', methods=['POST'])
+@login_required
+def grant_contract_to_position(position_id):
+    """为岗位授权访问特定合同"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    position = Position.query.get_or_404(position_id)
+
+    if position.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('positions'))
+
+    contract_id = int(request.form['contract_id'])
+    permission_type = request.form.get('permission_type', 'view')
+
+    # 检查是否已存在
+    existing = PositionContractPermission.query.filter_by(
+        position_id=position_id,
+        contract_id=contract_id
+    ).first()
+    if existing:
+        # 更新权限类型
+        existing.permission_type = permission_type
+        db.session.commit()
+        flash('合同权限已更新', 'success')
+    else:
+        pcp = PositionContractPermission(
+            position_id=position_id,
+            contract_id=contract_id,
+            permission_type=permission_type
+        )
+        db.session.add(pcp)
+        db.session.commit()
+        flash('合同权限已授予', 'success')
+
+    return redirect(url_for('positions'))
+
+
+@app.route('/user_position/<int:up_id>/remove', methods=['POST'])
+@login_required
+def remove_user_position(up_id):
+    """移除用户的岗位"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    up = UserPosition.query.get_or_404(up_id)
+    db.session.delete(up)
+    db.session.commit()
+    flash('岗位已移除', 'success')
+    return redirect(url_for('positions'))
+
+
+# ==================== 虚拟组织管理 ====================
+
+
 # 新增：带业务类型的新建客户路由
 @app.route('/customer/new/<business_type>', methods=['GET', 'POST'])
 @login_required
@@ -991,8 +1469,7 @@ def customer_archive(business_type):
     customers_list = query.order_by(Customer.province, Customer.name).all()
 
     # 获取用户权限
-    user = User.query.get(session['user_id'])
-    user_permissions = user.permissions if user else ''
+    user_permissions = get_user_permissions_string(session['user_id'])
 
     return render_template('customer_archive.html',
                          customers=customers_list,
@@ -1160,8 +1637,7 @@ def product_archive(product_type):
     products_list = query.order_by(Product.name).all()
 
     # 获取用户权限
-    user = User.query.get(session['user_id'])
-    user_permissions = user.permissions if user else ''
+    user_permissions = get_user_permissions_string(session['user_id'])
 
     return render_template('product_archive.html',
                          products=products_list,
@@ -1636,6 +2112,40 @@ def contract_archive(business_type):
     if customer_id is not None:
         query = query.filter(Contract.customer_id == customer_id)
 
+    # 新增：数据权限过滤
+    user_id = session.get('user_id')
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        # None 表示可访问所有合同，不需要过滤
+        if accessible_ids is not None:
+            if not accessible_ids:
+                # 空列表表示没有可访问的合同
+                contracts = []
+                stats = {
+                    'count': 0,
+                    'total_price': 0,
+                    'total_paid': 0,
+                    'total_unpaid': 0,
+                    'total_invoiced': 0,
+                    'total_uninvoiced': 0,
+                }
+                user = User.query.get(user_id)
+                return render_template('contract_archive.html',
+                                     contracts=[],
+                                     stats=stats,
+                                     available_years=[],
+                                     alerts=[],
+                                     user_permissions=get_user_permissions_string(user_id),
+                                     is_tenant_user=user.customer_id is not None if user else False,
+                                     business_type=business_type,
+                                     page=1,
+                                     per_page=10,
+                                     total_pages=0,
+                                     total_contracts=0)
+            else:
+                # 过滤可访问的合同
+                query = query.filter(Contract.id.in_(accessible_ids))
+
     # 原有筛选条件
     if request.args.get('project_staff'):
         query = query.filter(Contract.project_staff.like(f"%{request.args.get('project_staff')}%"))
@@ -1694,7 +2204,7 @@ def contract_archive(business_type):
     # 收付款预警
     alerts = []
     user = User.query.get(session['user_id'])
-    user_permissions = user.permissions if user else ''
+    user_permissions = get_user_permissions_string(session['user_id'])
     is_tenant_user = user.customer_id is not None if user else False
 
     # 新增：分页功能
@@ -1808,28 +2318,81 @@ def new_contract():
 
 
 @app.route('/contract/<int:id>')
+@login_required
 def view_contract(id):
     contract = Contract.query.get_or_404(id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    user_id = session.get('user_id')
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and id not in accessible_ids:
+            flash('您没有权限查看该合同', 'warning')
+            return redirect(url_for('index'))
+
     return render_template('contract_detail.html', contract=contract, view_only=True)
 
 
 @app.route('/contract/<int:id>/manage')
 @login_required
-@permission_required('修改')
 def manage_contract(id):
     contract = Contract.query.get_or_404(id)
+
+    # 租户隔离检查
     customer_id = get_current_customer_id()
     if customer_id is not None and contract.customer_id != customer_id:
+        app.logger.warning(f"租户隔离检查失败: user_customer={customer_id}, contract_customer={contract.customer_id}")
         flash('权限不足', 'warning')
         return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '修改', contract):
+        flash('您没有权限管理该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        app.logger.info(f"数据权限检查: user_id={user_id}, contract_id={id}, accessible_ids={'全部' if accessible_ids is None else accessible_ids}")
+        if accessible_ids is not None and id not in accessible_ids:
+            app.logger.warning(f"数据权限检查失败: contract_id={id} 不在可访问列表中")
+            flash('您没有权限管理该合同', 'warning')
+            return redirect(url_for('index'))
+
     return render_template('contract_detail.html', contract=contract, view_only=False)
 
 
 @app.route('/contract/<int:id>/delete', methods=['POST'])
 @login_required
-@permission_required('删除')
 def delete_contract(id):
     contract = Contract.query.get_or_404(id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '删除', contract):
+        flash('您没有权限删除该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and id not in accessible_ids:
+            flash('您没有权限删除该合同', 'warning')
+            return redirect(url_for('index'))
+
     db.session.delete(contract)
     db.session.commit()
     flash('合同已删除', 'success')
@@ -1850,14 +2413,24 @@ def batch_delete_contracts():
 
     # 数据隔离检查
     customer_id = get_current_customer_id()
+    user_id = session.get('user_id')
+
+    # 获取用户可访问的合同ID
+    accessible_ids = None
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
 
     deleted_count = 0
     for contract_id in contract_ids:
         contract = Contract.query.get(contract_id)
         if contract:
-            # 检查权限
+            # 检查租户权限
             if customer_id is not None and contract.customer_id != customer_id:
                 continue  # 跳过其他租户的合同
+
+            # 检查数据权限
+            if accessible_ids is not None and int(contract_id) not in accessible_ids:
+                continue  # 跳过无权限的合同
 
             db.session.delete(contract)
             deleted_count += 1
@@ -1874,7 +2447,6 @@ def batch_delete_contracts():
 
 @app.route('/contract/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
-@permission_required('修改')
 def edit_contract(id):
     contract = Contract.query.get_or_404(id)
 
@@ -1883,6 +2455,19 @@ def edit_contract(id):
     if customer_id is not None and contract.customer_id != customer_id:
         flash('权限不足：无法访问其他租户的合同', 'warning')
         return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '修改', contract):
+        flash('您没有权限编辑该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and id not in accessible_ids:
+            flash('您没有权限编辑该合同', 'warning')
+            return redirect(url_for('index'))
 
     if request.method == 'POST':
         contract.customer_name = request.form['customer_name']
@@ -1953,7 +2538,29 @@ def edit_contract(id):
 
 
 @app.route('/contract/<int:id>/payment', methods=['POST'])
+@login_required
 def add_payment(id):
+    contract = Contract.query.get_or_404(id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '增加', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
     payment = Payment(
         contract_id=id,
         amount=float(request.form['amount']),
@@ -1986,8 +2593,28 @@ def add_payment(id):
 
 @app.route('/contract/<int:id>/delivery', methods=['POST'])
 @login_required
-@permission_required('增加')
 def add_delivery(id):
+    contract = Contract.query.get_or_404(id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '增加', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
     delivery = Delivery(
         contract_id=id,
         delivery_date=datetime.strptime(request.form['delivery_date'], '%Y-%m-%d').date(),
@@ -2014,8 +2641,28 @@ def add_delivery(id):
 
 @app.route('/contract/<int:id>/invoice', methods=['POST'])
 @login_required
-@permission_required('增加')
 def add_invoice(id):
+    contract = Contract.query.get_or_404(id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '增加', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
     invoice_number = request.form.get('invoice_number', '').strip()
     # 发票号重复检测
     if invoice_number:
@@ -2056,10 +2703,88 @@ def add_invoice(id):
     return redirect(url_for('view_contract', id=id))
 
 
+@app.route('/payment/<int:pid>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_payment(pid):
+    payment = Payment.query.get_or_404(pid)
+    contract = Contract.query.get_or_404(payment.contract_id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '修改', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and contract.id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        payment.amount = float(request.form['amount'])
+        payment.payment_date = datetime.strptime(request.form['payment_date'], '%Y-%m-%d').date()
+        payment.payment_type = request.form.get('payment_type')
+        payment.note = request.form.get('note')
+
+        # 处理新上传的文件
+        if 'receipt_file' in request.files:
+            files = request.files.getlist('receipt_file')
+            saved = []
+            for file in files:
+                if file.filename:
+                    filename = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{file.filename}"
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    saved.append(filename)
+            if saved:
+                # 如果已有文件，追加；如果没有，直接设置
+                if payment.receipt_file:
+                    payment.receipt_file = payment.receipt_file + ',' + ','.join(saved)
+                else:
+                    payment.receipt_file = ','.join(saved)
+
+        db.session.commit()
+        # 自动更新合同状态
+        auto_update_contract_status(contract)
+        db.session.commit()
+        flash('收付款记录更新成功', 'success')
+        return redirect(url_for('view_contract', id=contract.id))
+
+    return render_template('edit_payment.html', payment=payment, contract=contract)
+
+
 @app.route('/payment/<int:pid>/delete', methods=['POST'])
 @login_required
 def delete_payment(pid):
     payment = Payment.query.get_or_404(pid)
+    contract = Contract.query.get_or_404(payment.contract_id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '删除', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and contract.id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
     contract_id = payment.contract_id
     if payment.receipt_file:
         try:
@@ -2090,10 +2815,84 @@ def delete_payment_file(pid):
     return redirect(url_for('view_contract', id=payment.contract_id))
 
 
+@app.route('/delivery/<int:did>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_delivery(did):
+    delivery = Delivery.query.get_or_404(did)
+    contract = Contract.query.get_or_404(delivery.contract_id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '修改', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and contract.id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        delivery.delivery_date = datetime.strptime(request.form['delivery_date'], '%Y-%m-%d').date()
+        delivery.content = request.form.get('content')
+        delivery.note = request.form.get('note')
+
+        # 处理新上传的文件
+        if 'delivery_file' in request.files:
+            files = request.files.getlist('delivery_file')
+            saved = []
+            for file in files:
+                if file.filename:
+                    filename = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{file.filename}"
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    saved.append(filename)
+            if saved:
+                # 如果已有文件，追加；如果没有，直接设置
+                if delivery.delivery_file:
+                    delivery.delivery_file = delivery.delivery_file + ',' + ','.join(saved)
+                else:
+                    delivery.delivery_file = ','.join(saved)
+
+        db.session.commit()
+        flash('交付记录更新成功', 'success')
+        return redirect(url_for('view_contract', id=contract.id))
+
+    return render_template('edit_delivery.html', delivery=delivery, contract=contract)
+
+
 @app.route('/delivery/<int:did>/delete', methods=['POST'])
 @login_required
 def delete_delivery(did):
     delivery = Delivery.query.get_or_404(did)
+    contract = Contract.query.get_or_404(delivery.contract_id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '删除', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and contract.id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
     contract_id = delivery.contract_id
     if delivery.delivery_file:
         try:
@@ -2120,10 +2919,98 @@ def delete_delivery_file(did):
     return redirect(url_for('view_contract', id=delivery.contract_id))
 
 
+@app.route('/invoice/<int:iid>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_invoice(iid):
+    invoice = Invoice.query.get_or_404(iid)
+    contract = Contract.query.get_or_404(invoice.contract_id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '修改', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and contract.id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        invoice_number = request.form.get('invoice_number', '').strip()
+        # 发票号重复检测（排除当前记录）
+        if invoice_number:
+            existing = Invoice.query.filter_by(invoice_number=invoice_number).filter(Invoice.id != iid).first()
+            if existing:
+                flash(f'发票号"{invoice_number}"已存在，请核对重新输入', 'warning')
+                return redirect(url_for('edit_invoice', iid=iid))
+
+        invoice.amount = float(request.form['amount'])
+        invoice.received_date = datetime.strptime(request.form['received_date'], '%Y-%m-%d').date()
+        invoice.invoice_number = invoice_number or None
+        invoice.note = request.form.get('note')
+        invoice.invoice_status = request.form.get('invoice_status', '未开具')
+        invoice.invoice_type = request.form.get('invoice_type', '普票')
+
+        # 处理新上传的文件
+        if 'invoice_file' in request.files:
+            files = request.files.getlist('invoice_file')
+            saved = []
+            for file in files:
+                if file.filename:
+                    filename = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{file.filename}"
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    saved.append(filename)
+            if saved:
+                # 如果已有文件，追加；如果没有，直接设置
+                if invoice.invoice_file:
+                    invoice.invoice_file = invoice.invoice_file + ',' + ','.join(saved)
+                else:
+                    invoice.invoice_file = ','.join(saved)
+
+        db.session.commit()
+        # 自动更新合同状态
+        auto_update_contract_status(contract)
+        db.session.commit()
+        flash('发票记录更新成功', 'success')
+        return redirect(url_for('view_contract', id=contract.id))
+
+    return render_template('edit_invoice.html', invoice=invoice, contract=contract)
+
+
 @app.route('/invoice/<int:iid>/delete', methods=['POST'])
 @login_required
 def delete_invoice(iid):
     invoice = Invoice.query.get_or_404(iid)
+    contract = Contract.query.get_or_404(invoice.contract_id)
+
+    # 租户隔离检查
+    customer_id = get_current_customer_id()
+    if customer_id is not None and contract.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    # 功能权限检查（项目负责人自动拥有权限）
+    user_id = session.get('user_id')
+    if not has_permission_for_contract(user_id, '删除', contract):
+        flash('您没有权限操作该合同', 'warning')
+        return redirect(url_for('index'))
+
+    # 数据权限检查
+    if user_id and customer_id is not None:
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        if accessible_ids is not None and contract.id not in accessible_ids:
+            flash('您没有权限操作该合同', 'warning')
+            return redirect(url_for('index'))
+
     contract_id = invoice.contract_id
     if invoice.invoice_file:
         try:
@@ -2352,7 +3239,11 @@ def import_contracts():
 @login_required
 @permission_required('下载')
 def download_file(filename):
-    return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.exists(file_path):
+        flash('文件不存在或已被删除', 'warning')
+        return redirect(request.referrer or url_for('index'))
+    return send_file(file_path, as_attachment=True)
 
 
 # 系统配置（公司图标/名称）
@@ -2422,8 +3313,8 @@ def sysconfig():
 @app.route('/preview/<filename>')
 @login_required
 def preview_file(filename):
-    user = User.query.get(session['user_id'])
-    if user.role != '超级管理员' and user.permissions != 'all' and '查阅' not in (user.permissions or ''):
+    user_id = session['user_id']
+    if not has_permission(user_id, '查阅'):
         flash('权限不足', 'warning')
         return redirect(url_for('index'))
     from flask import Response

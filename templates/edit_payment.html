@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('view_contract', id=contract.id) }}" class="btn btn-secondary">返回合同详情</a>
+</div>
+
+<h2>编辑收付款记录</h2>
+<p style="color: #666;">合同：{{ contract.project_name }}</p>
+
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group">
+        <label>金额*</label>
+        <input type="number" step="0.01" name="amount" value="{{ payment.amount }}" required>
+    </div>
+
+    <div class="form-group">
+        <label>日期*</label>
+        <input type="date" name="payment_date" value="{{ payment.payment_date }}" required>
+    </div>
+
+    <div class="form-group">
+        <label>类型</label>
+        <select name="payment_type">
+            <option value="收款" {% if payment.payment_type == '收款' %}selected{% endif %}>收款</option>
+            <option value="付款" {% if payment.payment_type == '付款' %}selected{% endif %}>付款</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>备注</label>
+        <input type="text" name="note" value="{{ payment.note or '' }}">
+    </div>
+
+    <div class="form-group">
+        <label>当前回单文件</label>
+        {% if payment.receipt_file %}
+        <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+            {% for fname in payment.receipt_file.split(',') %}
+            <div style="margin-bottom: 5px;">
+                <a href="{{ url_for('preview_file', filename=fname) }}" target="_blank">预览</a> |
+                <a href="{{ url_for('download_file', filename=fname) }}">下载</a>
+                <span style="color: #666; margin-left: 10px;">{{ fname }}</span>
+            </div>
+            {% endfor %}
+            <form method="POST" action="{{ url_for('delete_payment_file', pid=payment.id) }}" style="display:inline; margin-top: 10px;">
+                <button type="submit" class="btn btn-danger" style="padding:4px 12px;font-size:12px;" onclick="return confirm('确定删除所有回单文件？')">删除所有文件</button>
+            </form>
+        </div>
+        {% else %}
+        <p style="color: #999;">暂无文件</p>
+        {% endif %}
+    </div>
+
+    <div class="form-group">
+        <label>上传新的回单文件（可多选，会追加到已有文件）</label>
+        <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="previewFiles(this, 'receiptPreview')">
+        <div id="receiptPreview" style="margin-top:10px;"></div>
+        <small style="color: #666;">支持 PDF、JPG、PNG 格式，可同时上传多个文件</small>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <button type="submit" class="btn btn-primary">保存修改</button>
+        <a href="{{ url_for('view_contract', id=contract.id) }}" class="btn btn-secondary">取消</a>
+    </div>
+</form>
+
+<script>
+function previewFiles(input, previewId) {
+    const preview = document.getElementById(previewId);
+    preview.innerHTML = '';
+    Array.from(input.files).forEach(function(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (file.type.startsWith('image/')) {
+                preview.innerHTML += '<img src="' + e.target.result + '" style="max-width:200px;margin:4px;">';
+            } else if (file.type === 'application/pdf') {
+                preview.innerHTML += '<span style="display:inline-block;padding:4px 8px;background:#eee;margin:4px;border-radius:3px;">📄 ' + file.name + '</span>';
+            }
+        };
+        reader.readAsDataURL(file);
+    });
+}
+</script>
+{% endblock %}

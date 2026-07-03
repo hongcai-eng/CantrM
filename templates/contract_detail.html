@@ -128,6 +128,9 @@
                 {% endif %}
             </td>
             <td>
+                {% if not view_only %}
+                <a href="{{ url_for('edit_payment', pid=payment.id) }}" class="btn btn-primary" style="padding:2px 8px;font-size:12px;">编辑</a>
+                {% endif %}
                 <form method="POST" action="{{ url_for('delete_payment', pid=payment.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该条收付款记录？此操作不可恢复。')">删除记录</button>
                 </form>
@@ -182,6 +185,9 @@
                 {% endif %}
             </td>
             <td>
+                {% if not view_only %}
+                <a href="{{ url_for('edit_delivery', did=delivery.id) }}" class="btn btn-primary" style="padding:2px 8px;font-size:12px;">编辑</a>
+                {% endif %}
                 <form method="POST" action="{{ url_for('delete_delivery', did=delivery.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该条交付记录？此操作不可恢复。')">删除记录</button>
                 </form>
@@ -264,6 +270,9 @@
                 {% endif %}
             </td>
             <td>
+                {% if not view_only %}
+                <a href="{{ url_for('edit_invoice', iid=invoice.id) }}" class="btn btn-primary" style="padding:2px 8px;font-size:12px;">编辑</a>
+                {% endif %}
                 <form method="POST" action="{{ url_for('delete_invoice', iid=invoice.id) }}" style="display:inline;">
                     <button type="submit" class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="return confirm('确定删除该条发票记录？此操作不可恢复。')">删除记录</button>
                 </form>

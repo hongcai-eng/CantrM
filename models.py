@@ -49,6 +49,7 @@ class Organization(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('tenant_customer.id'), nullable=False)
     permissions = db.Column(db.String(500))  # 新增：组织权限（增加,删除,修改,查阅,上传,下载）
+    is_virtual = db.Column(db.Boolean, default=False)  # 虚拟组织（临时项目组）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # 关联
     children = db.relationship('Organization', backref=db.backref('parent', remote_side=[id]), lazy=True)
@@ -182,3 +183,48 @@ class SysConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.String(500))
+
+
+# 岗位模板表
+class Position(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # 岗位名称：如"项目经理"
+    description = db.Column(db.String(500))
+    customer_id = db.Column(db.Integer, db.ForeignKey('tenant_customer.id'), nullable=False)
+
+    # 功能权限（增加,删除,修改,查阅,上传,下载,导入EXCEL,导出EXCEL）
+    function_permissions = db.Column(db.String(500))
+
+    # 数据权限类型：all=全部合同, org=本组织合同, self=仅自己创建, custom=自定义合同列表
+    data_scope = db.Column(db.String(50), default='all')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# 用户岗位关联表（多对多）
+class UserPosition(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    position_id = db.Column(db.Integer, db.ForeignKey('position.id'), nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)  # 在哪个组织担任此岗位
+
+    is_primary = db.Column(db.Boolean, default=False)  # 是否为主岗位
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# 岗位-合同权限关联表
+class PositionContractPermission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    position_id = db.Column(db.Integer, db.ForeignKey('position.id'), nullable=False)
+    contract_id = db.Column(db.Integer, db.ForeignKey('contract.id'), nullable=False)
+    permission_type = db.Column(db.String(20), default='view')  # view=查看, edit=编辑
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# 用户-组织多对多关联表（支持用户同时属于多个组织）
+class UserOrganization(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
+    is_primary = db.Column(db.Boolean, default=False)  # 是否为主组织
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
