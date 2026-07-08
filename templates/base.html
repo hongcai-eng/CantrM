@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>合同管理系统</title>
+    <!-- Flatpickr 日期选择器 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #f5f5f5; }
@@ -196,6 +198,7 @@
             {% if session.role == '超级管理员' %}
             <li><a href="{{ url_for('users') }}">用户管理</a></li>
             <li><a href="{{ url_for('organizations') }}">组织管理</a></li>
+            <li><a href="{{ url_for('positions') }}">岗位管理</a></li>
             <li><a href="{{ url_for('sysconfig') }}">系统配置</a></li>
             {% endif %}
             {% endif %}
@@ -457,6 +460,73 @@
             toggleSidebar('product');
         }
     });
+    </script>
+
+    <!-- Flatpickr 日期选择器库 -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+
+    <!-- 日期输入框优化脚本 - 4位年份自动跳转到月份 -->
+    <script>
+    (function() {
+        function initCustomDatePicker() {
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+
+            dateInputs.forEach(function(input) {
+                // 保存原始值
+                const originalValue = input.value;
+
+                // 转换为text类型，防止浏览器原生日期选择器
+                input.type = 'text';
+                input.placeholder = 'YYYY-MM-DD';
+
+                // 初始化 Flatpickr
+                const fp = flatpickr(input, {
+                    locale: 'zh',
+                    dateFormat: 'Y-m-d',
+                    allowInput: true,
+
+                    onReady: function(selectedDates, dateStr, instance) {
+                        // 监听年份输入框
+                        const yearInput = instance.yearElements[0];
+                        if (yearInput) {
+                            yearInput.setAttribute('maxlength', '4');
+
+                            yearInput.addEventListener('input', function(e) {
+                                const value = e.target.value;
+                                // 输入4位数字后自动跳转到月份
+                                if (value.length === 4 && /^\d{4}$/.test(value)) {
+                                    setTimeout(function() {
+                                        const monthDropdown = instance.monthElements[0];
+                                        if (monthDropdown) {
+                                            monthDropdown.focus();
+                                            // 模拟点击展开月份选择
+                                            monthDropdown.click();
+                                        }
+                                    }, 100);
+                                }
+                            });
+                        }
+                    }
+                });
+
+                // 恢复原始值
+                if (originalValue) {
+                    fp.setDate(originalValue, false);
+                }
+            });
+        }
+
+        // 页面加载后初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initCustomDatePicker);
+        } else {
+            initCustomDatePicker();
+        }
+
+        // 提供全局函数供动态页面使用
+        window.initCustomDatePicker = initCustomDatePicker;
+    })();
     </script>
 </body>
 </html>

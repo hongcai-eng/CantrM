@@ -177,7 +177,17 @@ def migrate():
         else:
             print(f"[ERROR] contract 表添加字段失败: {e}")
 
-    # 14. 为 tenant_customer 表添加 trial_expires_at 字段（v3.2 自助注册试用期）
+    # 14. 为 contract 表添加 organization_id 字段
+    try:
+        cursor.execute("ALTER TABLE contract ADD COLUMN organization_id INTEGER")
+        print("[OK] contract 表添加 organization_id 字段")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("[SKIP] contract.organization_id 字段已存在")
+        else:
+            print(f"[ERROR] contract 表添加字段失败: {e}")
+
+    # 15. 为 tenant_customer 表添加 trial_expires_at 字段（v3.2 自助注册试用期）
     try:
         cursor.execute("ALTER TABLE tenant_customer ADD COLUMN trial_expires_at DATETIME")
         print("[OK] tenant_customer 表添加 trial_expires_at 字段")
@@ -187,7 +197,7 @@ def migrate():
         else:
             print(f"[ERROR] tenant_customer 表添加字段失败: {e}")
 
-    # 15. 修正 user 表唯一约束：UNIQUE(username) -> UNIQUE(username, customer_id)（v3.3 跨租户用户名隔离）
+    # 16. 修正 user 表唯一约束：UNIQUE(username) -> UNIQUE(username, customer_id)（v3.3 跨租户用户名隔离）
     try:
         cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='user'")
         row = cursor.fetchone()

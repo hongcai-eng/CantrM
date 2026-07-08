@@ -61,9 +61,9 @@ def inject_company():
     try:
         user_id = session.get('user_id')
         if user_id:
-            user = User.query.get(user_id)
+            user = db.session.get(User, user_id)
             if user and user.customer_id:
-                tenant = TenantCustomer.query.get(user.customer_id)
+                tenant = db.session.get(TenantCustomer, user.customer_id)
                 if tenant:
                     if tenant.system_name:
                         system_name = tenant.system_name
@@ -78,9 +78,9 @@ def inject_company():
     try:
         user_id = session.get('user_id')
         if user_id:
-            user = User.query.get(user_id)
+            user = db.session.get(User, user_id)
             if user and user.customer_id:
-                t = TenantCustomer.query.get(user.customer_id)
+                t = db.session.get(TenantCustomer, user.customer_id)
                 if t:
                     current_tenant_name = t.name
     except Exception:
@@ -99,7 +99,7 @@ def get_current_customer_id():
     """获取当前登录用户的租户客户ID，superadmin返回None"""
     if 'user_id' not in session:
         return None
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     return user.customer_id if user else None
 
 
@@ -108,7 +108,7 @@ def is_customer_admin():
     """判断当前用户是否为客户超级管理员（admin角色且有customer_id）"""
     if 'user_id' not in session:
         return False
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     return user and user.role == '超级管理员' and user.customer_id is not None
 
 
@@ -118,7 +118,7 @@ def get_user_function_permissions(user_id):
     获取用户的综合功能权限（用户自身权限 + 岗位权限合并）
     返回：权限列表或 'all'
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return []
 
@@ -138,7 +138,7 @@ def get_user_function_permissions(user_id):
     # 2. 用户岗位的功能权限
     user_positions = UserPosition.query.filter_by(user_id=user_id).all()
     for up in user_positions:
-        position = Position.query.get(up.position_id)
+        position = db.session.get(Position, up.position_id)
         if position and position.function_permissions:
             position_perms = position.function_permissions.split(',')
             permissions.update(position_perms)
@@ -175,7 +175,7 @@ def has_permission_for_contract(user_id, permission, contract):
         contract: 合同对象
     返回：True/False
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return False
 
@@ -209,7 +209,7 @@ def get_user_data_scope(user_id):
     返回：'all' | 'org' | 'custom' | 'self'
     优先级：all > org > custom > self
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return 'self'
 
@@ -225,7 +225,7 @@ def get_user_data_scope(user_id):
     # 获取所有岗位的数据权限范围
     scopes = []
     for up in user_positions:
-        position = Position.query.get(up.position_id)
+        position = db.session.get(Position, up.position_id)
         if position:
             scopes.append(position.data_scope)
 
@@ -247,7 +247,7 @@ def get_user_accessible_contract_ids(user_id, customer_id):
         customer_id: 租户ID
     返回：合同ID列表，如果返回 None 表示可访问所有合同
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return []
 
@@ -263,12 +263,12 @@ def get_user_accessible_contract_ids(user_id, customer_id):
 
     # 本组织合同权限
     if data_scope == 'org':
-        # 获取用户所属的所有组织
-        user_orgs = UserOrganization.query.filter_by(user_id=user_id).all()
+        # 获取用户的主组织（只看主组织的数据）
+        user_orgs = UserOrganization.query.filter_by(user_id=user_id, is_primary=True).all()
         org_ids = [uo.organization_id for uo in user_orgs]
 
         if not org_ids:
-            # 如果用户没有分配组织，则只能看自己创建的和负责的合同
+            # 如果用户没有主组织，则只能看自己创建的和负责的合同
             own_contracts = Contract.query.filter(
                 Contract.customer_id == customer_id,
                 db.or_(
@@ -278,7 +278,7 @@ def get_user_accessible_contract_ids(user_id, customer_id):
             ).all()
             return [c.id for c in own_contracts]
 
-        # 返回用户所属组织的所有合同
+        # 返回用户主组织的所有合同
         return [c.id for c in Contract.query.filter(
             Contract.customer_id == customer_id,
             Contract.organization_id.in_(org_ids)
@@ -384,7 +384,7 @@ def login():
         if user and user.check_password(password):
             # 检查试用期
             if user.customer_id:
-                tenant = TenantCustomer.query.get(user.customer_id)
+                tenant = db.session.get(TenantCustomer, user.customer_id)
                 if tenant and tenant.trial_expires_at and datetime.utcnow() > tenant.trial_expires_at:
                     flash('试用期已结束，请联系管理员续期', 'warning')
                     return render_template('login.html', tenants=tenants, system_name=system_name)
@@ -448,7 +448,7 @@ def api_user_branding():
             'logo_url': logo_url
         })
 
-    tenant = TenantCustomer.query.get(user.customer_id)
+    tenant = db.session.get(TenantCustomer, user.customer_id)
     if not tenant:
         return jsonify({'company_name': '', 'logo_url': ''})
 
@@ -500,7 +500,7 @@ def index():
         if accessible_ids is not None:
             if not accessible_ids:
                 # 空列表表示没有可访问的合同
-                user = User.query.get(user_id)
+                user = db.session.get(User, user_id)
                 return render_template('index.html',
                                      contracts=[],
                                      available_years=[],
@@ -816,7 +816,7 @@ def create_tenant():
     existing_user = User.query.filter_by(username=admin_username).first()
     if existing_user:
         # 如果该账号关联的租户已不存在（孤儿账号），自动清除并允许继续
-        if existing_user.customer_id is not None and TenantCustomer.query.get(existing_user.customer_id) is None:
+        if existing_user.customer_id is not None and db.session.get(TenantCustomer, existing_user.customer_id) is None:
             db.session.delete(existing_user)
             db.session.flush()
         else:
@@ -1080,18 +1080,59 @@ def transfer_user():
     if target_org_id and target_org_id.strip():
         target_org_id = int(target_org_id)
         # 验证目标组织属于当前租户
-        target_org = Organization.query.get(target_org_id)
+        target_org = db.session.get(Organization, target_org_id)
         if not target_org or target_org.customer_id != customer_id:
             flash('目标组织不存在或权限不足', 'warning')
             return redirect(url_for('organizations'))
         user.organization_id = target_org_id
-        # 继承组织权限
+
+        # 新增：同步更新 UserOrganization 表的主组织标记
+        # 先取消所有主组织标记
+        UserOrganization.query.filter_by(user_id=user.id, is_primary=True).update({'is_primary': False})
+
+        # 查找或创建目标组织的记录
+        existing_user_org = UserOrganization.query.filter_by(
+            user_id=user.id,
+            organization_id=target_org_id
+        ).first()
+
+        if existing_user_org:
+            # 如果记录已存在，更新为主组织
+            existing_user_org.is_primary = True
+        else:
+            # 如果记录不存在，创建新记录
+            user_org = UserOrganization(
+                user_id=user.id,
+                organization_id=target_org_id,
+                is_primary=True
+            )
+            db.session.add(user_org)
+
+        # 新增：同步更新用户岗位的组织归属
+        # 将用户的所有岗位都更新到新组织
+        user_positions = UserPosition.query.filter_by(user_id=user.id).all()
+        for up in user_positions:
+            up.organization_id = target_org_id
+
+        # 合并组织权限（保留用户原有权限）
         if target_org.permissions:
-            user.permissions = target_org.permissions
+            # 获取用户当前权限集合
+            current_perms = set()
+            if user.permissions and user.permissions != 'all':
+                current_perms = set(user.permissions.split(','))
+
+            # 获取组织权限集合
+            org_perms = set(target_org.permissions.split(','))
+
+            # 合并权限（用户权限 + 组织权限）
+            merged_perms = current_perms.union(org_perms)
+            user.permissions = ','.join(sorted(merged_perms))
         flash(f'用户"{user.username}"已调入组织"{target_org.name}"', 'success')
     else:
         # 调出组织（设为 None）
         user.organization_id = None
+        # 新增：同时清除 UserOrganization 表中的主组织标记
+        UserOrganization.query.filter_by(user_id=user.id, is_primary=True).update({'is_primary': False})
         flash(f'用户"{user.username}"已调出组织', 'success')
 
     db.session.commit()
@@ -1223,8 +1264,31 @@ def positions():
     # 获取当前租户的所有用户
     users = User.query.filter_by(customer_id=customer_id).all()
 
+    # 新增：构建用户岗位映射表
+    user_positions_map = {}
+    for user in users:
+        user_positions = UserPosition.query.filter_by(user_id=user.id).all()
+        positions_list = []
+        for up in user_positions:
+            pos = db.session.get(Position, up.position_id)
+            org = db.session.get(Organization, up.organization_id) if up.organization_id else None
+            if pos:
+                positions_list.append({
+                    'position_name': pos.name,
+                    'organization_name': org.name if org else None,
+                    'is_primary': up.is_primary
+                })
+        user_positions_map[user.id] = positions_list
+
+    # 新增：统计每个岗位的人员数
+    user_positions_count = {}
+    for position in positions:
+        count = UserPosition.query.filter_by(position_id=position.id).count()
+        user_positions_count[position.id] = count
+
     return render_template('positions.html', positions=positions, contracts=contracts,
-                         organizations=organizations, users=users)
+                         organizations=organizations, users=users, user_positions_map=user_positions_map,
+                         user_positions_count=user_positions_count)
 
 
 @app.route('/position/create', methods=['POST'])
@@ -1281,10 +1345,15 @@ def edit_position(position_id):
     position.data_scope = request.form.get('data_scope', 'all')
 
     selected_perms = request.form.getlist('function_permissions')
-    position.function_permissions = ','.join(selected_perms) if selected_perms else None
+    new_function_permissions = ','.join(selected_perms) if selected_perms else None
+
+    # 新增：功能权限修改后，通知用户需要重新登录或刷新页面
+    # 权限系统通过 get_user_function_permissions() 实时从数据库读取岗位权限
+    # 但是某些页面可能缓存了权限信息，建议用户刷新
+    position.function_permissions = new_function_permissions
 
     db.session.commit()
-    flash(f'岗位"{position.name}"已更新', 'success')
+    flash(f'岗位"{position.name}"已更新，该岗位用户的权限已同步生效。如用户当前页面权限未更新，请刷新页面。', 'success')
     return redirect(url_for('positions'))
 
 
@@ -1351,9 +1420,45 @@ def assign_user_to_position(position_id):
         is_primary=is_primary
     )
     db.session.add(user_position)
+
+    # 新增：同步更新 User.organization_id 和 UserOrganization 表
+    user = db.session.get(User, user_id)
+    if org_id:
+        # 如果指定了组织
+        if is_primary or not user.organization_id:
+            # 如果是主岗位，或者用户还没有主组织，则更新
+            user.organization_id = org_id
+
+        # 确保 UserOrganization 表中有记录
+        user_org = UserOrganization.query.filter_by(
+            user_id=user_id,
+            organization_id=org_id
+        ).first()
+
+        if not user_org:
+            # 如果是主岗位，先取消其他主组织
+            if is_primary:
+                UserOrganization.query.filter_by(
+                    user_id=user_id,
+                    is_primary=True
+                ).update({'is_primary': False})
+
+            user_org = UserOrganization(
+                user_id=user_id,
+                organization_id=org_id,
+                is_primary=is_primary
+            )
+            db.session.add(user_org)
+        elif is_primary:
+            # 更新为主组织
+            UserOrganization.query.filter_by(
+                user_id=user_id,
+                is_primary=True
+            ).update({'is_primary': False})
+            user_org.is_primary = True
+
     db.session.commit()
 
-    user = User.query.get(user_id)
     flash(f'已为用户"{user.username}"分配岗位"{position.name}"', 'success')
     return redirect(url_for('positions'))
 
@@ -1412,6 +1517,40 @@ def remove_user_position(up_id):
     db.session.commit()
     flash('岗位已移除', 'success')
     return redirect(url_for('positions'))
+
+
+# 新增：API - 获取岗位下的用户列表
+@app.route('/api/position/<int:position_id>/users')
+@login_required
+def api_position_users(position_id):
+    """获取指定岗位下的用户列表（用于分配用户弹窗）"""
+    if session.get('role') != '超级管理员':
+        return jsonify([])
+
+    customer_id = get_current_customer_id()
+    position = Position.query.get_or_404(position_id)
+
+    # 验证权限
+    if position.customer_id != customer_id:
+        return jsonify([])
+
+    # 查询该岗位下的所有用户
+    user_positions = UserPosition.query.filter_by(position_id=position_id).all()
+    result = []
+    for up in user_positions:
+        user = db.session.get(User, up.user_id)
+        org = db.session.get(Organization, up.organization_id) if up.organization_id else None
+        if user:
+            result.append({
+                'user_position_id': up.id,
+                'user_id': user.id,
+                'username': user.username,
+                'role': user.role,
+                'organization_name': org.name if org else None,
+                'is_primary': up.is_primary
+            })
+
+    return jsonify(result)
 
 
 # ==================== 虚拟组织管理 ====================
@@ -1836,7 +1975,7 @@ def statistics():
     ).distinct().order_by(func.strftime('%Y', Contract.signing_date).desc()).all()
     available_years = [int(y[0]) for y in years_raw if y[0]]
 
-    user_permissions = User.query.get(session['user_id']).permissions or ''
+    user_permissions = db.session.get(User, session['user_id']).permissions or ''
     return render_template('statistics.html', stats=stats, filters=filters,
                            available_years=available_years, selected_sheets=selected_sheets,
                            detail_contracts=detail_contracts,
@@ -2031,6 +2170,11 @@ def new_contract_with_type(business_type):
             created_by=session.get('username')
         )
 
+        # 新增：保存所属组织
+        org_id = request.form.get('organization_id')
+        if org_id and org_id.strip():
+            contract.organization_id = int(org_id)
+
         # 处理合同文件上传
         if 'contract_file' in request.files:
             file = request.files['contract_file']
@@ -2085,13 +2229,16 @@ def new_contract_with_type(business_type):
     if customer_id is not None:
         customers_list = Customer.query.filter_by(customer_id=customer_id).order_by(Customer.name).all()
         products_list = Product.query.filter_by(customer_id=customer_id).order_by(Product.name).all()
+        organizations_list = Organization.query.filter_by(customer_id=customer_id).order_by(Organization.name).all()
     else:
         customers_list = Customer.query.order_by(Customer.name).all()
         products_list = Product.query.order_by(Product.name).all()
+        organizations_list = []
 
     return render_template('contract_form.html',
                          customers_list=customers_list,
                          products_list=products_list,
+                         organizations_list=organizations_list,
                          business_type=business_type)
 
 
@@ -2129,7 +2276,7 @@ def contract_archive(business_type):
                     'total_invoiced': 0,
                     'total_uninvoiced': 0,
                 }
-                user = User.query.get(user_id)
+                user = db.session.get(User, user_id)
                 return render_template('contract_archive.html',
                                      contracts=[],
                                      stats=stats,
@@ -2203,7 +2350,7 @@ def contract_archive(business_type):
 
     # 收付款预警
     alerts = []
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     user_permissions = get_user_permissions_string(session['user_id'])
     is_tenant_user = user.customer_id is not None if user else False
 
@@ -2254,6 +2401,11 @@ def new_contract():
             customer_id=customer_id,  # 新增：关联租户
             created_by=session.get('username')  # 新增：记录创建人
         )
+
+        # 新增：保存所属组织
+        org_id = request.form.get('organization_id')
+        if org_id and org_id.strip():
+            contract.organization_id = int(org_id)
 
         # 处理合同文件上传
         if 'contract_file' in request.files:
@@ -2310,11 +2462,13 @@ def new_contract():
     if customer_id is not None:
         customers_list = Customer.query.filter_by(customer_id=customer_id).order_by(Customer.name).all()
         products_list = Product.query.filter_by(customer_id=customer_id).order_by(Product.name).all()
+        organizations_list = Organization.query.filter_by(customer_id=customer_id).order_by(Organization.name).all()
     else:
         customers_list = Customer.query.order_by(Customer.name).all()
         products_list = Product.query.order_by(Product.name).all()
+        organizations_list = []
 
-    return render_template('contract_form.html', customers_list=customers_list, products_list=products_list)
+    return render_template('contract_form.html', customers_list=customers_list, products_list=products_list, organizations_list=organizations_list)
 
 
 @app.route('/contract/<int:id>')
@@ -2422,7 +2576,7 @@ def batch_delete_contracts():
 
     deleted_count = 0
     for contract_id in contract_ids:
-        contract = Contract.query.get(contract_id)
+        contract = db.session.get(Contract, contract_id)
         if contract:
             # 检查租户权限
             if customer_id is not None and contract.customer_id != customer_id:
@@ -2481,6 +2635,13 @@ def edit_contract(id):
         contract.business_type = request.form.get('business_type', '销售')
         contract.signing_date = datetime.strptime(request.form['signing_date'], '%Y-%m-%d').date() if request.form.get('signing_date') else None
 
+        # 新增：保存所属组织
+        org_id = request.form.get('organization_id')
+        if org_id and org_id.strip():
+            contract.organization_id = int(org_id)
+        else:
+            contract.organization_id = None
+
         if 'contract_file' in request.files:
             file = request.files['contract_file']
             if file.filename:
@@ -2530,11 +2691,13 @@ def edit_contract(id):
     if customer_id is not None:
         customers_list = Customer.query.filter_by(customer_id=customer_id).order_by(Customer.name).all()
         products_list = Product.query.filter_by(customer_id=customer_id).order_by(Product.name).all()
+        organizations_list = Organization.query.filter_by(customer_id=customer_id).order_by(Organization.name).all()
     else:
         customers_list = Customer.query.order_by(Customer.name).all()
         products_list = Product.query.order_by(Product.name).all()
+        organizations_list = []
 
-    return render_template('contract_form.html', contract=contract, customers_list=customers_list, products_list=products_list)
+    return render_template('contract_form.html', contract=contract, customers_list=customers_list, products_list=products_list, organizations_list=organizations_list)
 
 
 @app.route('/contract/<int:id>/payment', methods=['POST'])
@@ -2583,7 +2746,7 @@ def add_payment(id):
     db.session.add(payment)
     db.session.commit()
     # 新增：自动更新合同状态
-    contract = Contract.query.get(id)
+    contract = db.session.get(Contract, id)
     if contract:
         auto_update_contract_status(contract)
         db.session.commit()
@@ -2695,7 +2858,7 @@ def add_invoice(id):
     db.session.add(invoice)
     db.session.commit()
     # 新增：自动更新合同状态
-    contract = Contract.query.get(id)
+    contract = db.session.get(Contract, id)
     if contract:
         auto_update_contract_status(contract)
         db.session.commit()
@@ -2793,7 +2956,7 @@ def delete_payment(pid):
             pass
     db.session.delete(payment)
     db.session.flush()
-    contract = Contract.query.get(contract_id)
+    contract = db.session.get(Contract, contract_id)
     if contract:
         auto_update_contract_status(contract)
     db.session.commit()
@@ -3019,7 +3182,7 @@ def delete_invoice(iid):
             pass
     db.session.delete(invoice)
     db.session.flush()
-    contract = Contract.query.get(contract_id)
+    contract = db.session.get(Contract, contract_id)
     if contract:
         auto_update_contract_status(contract)
     db.session.commit()
@@ -3278,9 +3441,9 @@ def sysconfig():
                         db.session.add(SysConfig(key='company_logo_file', value=logo_filename))
         else:
             # 租户超管保存到租户配置
-            user = User.query.get(session['user_id'])
+            user = db.session.get(User, session['user_id'])
             if user and user.customer_id:
-                tenant = TenantCustomer.query.get(user.customer_id)
+                tenant = db.session.get(TenantCustomer, user.customer_id)
                 if tenant:
                     tenant.system_name = request.form.get('system_name', '').strip()
                     tenant.company_name = request.form.get('company_name', '').strip()
@@ -3300,9 +3463,9 @@ def sysconfig():
     if session.get('username') == 'superadmin':
         configs = {c.key: c.value for c in SysConfig.query.all()}
     else:
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if user and user.customer_id:
-            tenant = TenantCustomer.query.get(user.customer_id)
+            tenant = db.session.get(TenantCustomer, user.customer_id)
             if tenant:
                 configs['system_name'] = tenant.system_name or ''
                 configs['company_name'] = tenant.company_name or ''

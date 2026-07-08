@@ -128,6 +128,8 @@ class Contract(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey('tenant_customer.id'), nullable=True)
     # 新增：创建人用户名
     created_by = db.Column(db.String(100))
+    # 新增：所属组织ID
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
 
     payments = db.relationship('Payment', backref='contract', lazy=True, cascade='all, delete-orphan')
     deliveries = db.relationship('Delivery', backref='contract', lazy=True, cascade='all, delete-orphan')

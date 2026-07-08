@@ -193,6 +193,23 @@
             <input type="text" name="sales_staff" value="{{ contract.sales_staff if contract else '' }}">
         </div>
     </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>所属组织/部门</label>
+            <select name="organization_id">
+                <option value="">未分配</option>
+                {% if organizations_list %}
+                    {% for org in organizations_list %}
+                    <option value="{{ org.id }}" {% if contract and contract.organization_id == org.id %}selected{% endif %}>
+                        {{ org.name }}
+                    </option>
+                    {% endfor %}
+                {% endif %}
+            </select>
+            <small style="color:#888;">选择合同所属的组织/部门，用于数据权限控制</small>
+        </div>
+        <div class="form-group"></div>
+    </div>
     <div class="form-group">
         <label>合同签订日期</label>
         <input type="date" name="signing_date" value="{{ contract.signing_date if contract else '' }}">
