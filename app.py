@@ -267,22 +267,41 @@ def get_user_accessible_contract_ids(user_id, customer_id):
         user_orgs = UserOrganization.query.filter_by(user_id=user_id, is_primary=True).all()
         org_ids = [uo.organization_id for uo in user_orgs]
 
-        if not org_ids:
-            # 如果用户没有主组织，则只能看自己创建的和负责的合同
-            own_contracts = Contract.query.filter(
-                Contract.customer_id == customer_id,
-                db.or_(
-                    Contract.created_by == user_id,
-                    Contract.project_staff.like(f'%{user.username}%')
-                )
-            ).all()
-            return [c.id for c in own_contracts]
-
-        # 返回用户主组织的所有合同
-        return [c.id for c in Contract.query.filter(
+        # 新增：已完结的合同只有原合同负责人/创建人能看到（不随组织显示）
+        # 无论是否有主组织，用户都能看到自己负责/创建的合同（含已完结）
+        own_contracts = Contract.query.filter(
             Contract.customer_id == customer_id,
-            Contract.organization_id.in_(org_ids)
-        ).all()]
+            db.or_(
+                Contract.created_by == user_id,
+                Contract.project_staff.like(f'%{user.username}%')
+            )
+        ).all()
+        own_ids = [c.id for c in own_contracts]
+
+        # 新增：通过岗位被显式授权的合同（含已完结，原负责人及被授权者都能看到）
+        user_positions = UserPosition.query.filter_by(user_id=user_id).all()
+        position_ids = [up.position_id for up in user_positions]
+        granted_ids = []
+        if position_ids:
+            permissions = PositionContractPermission.query.filter(
+                PositionContractPermission.position_id.in_(position_ids)
+            ).all()
+            granted_ids = [p.contract_id for p in permissions]
+
+        if not org_ids:
+            # 如果用户没有主组织，则只能看自己创建/负责的和被授权的合同
+            return list(set(own_ids + granted_ids))
+
+        # 本组织合同：只显示"进行中"的合同（已完结的不随组织显示）
+        org_contracts = Contract.query.filter(
+            Contract.customer_id == customer_id,
+            Contract.organization_id.in_(org_ids),
+            Contract.status != '已完结'
+        ).all()
+        org_ids_list = [c.id for c in org_contracts]
+
+        # 合并：本组织进行中的合同 + 自己负责/创建的合同（含已完结）+ 被岗位授权的合同（含已完结）
+        return list(set(org_ids_list + own_ids + granted_ids))
 
     # 自定义权限
     if data_scope == 'custom':
@@ -1403,6 +1422,11 @@ def assign_user_to_position(position_id):
     org_id = int(org_id) if org_id and org_id.strip() else None
     is_primary = request.form.get('is_primary') == 'on'
 
+    # 新增：如果岗位的数据权限是"本组织合同"，但未指定组织，给出提示
+    if position.data_scope == 'org' and not org_id:
+        flash(f'岗位"{position.name}"的数据权限为"本组织合同"，必须指定所属组织，否则用户无法访问组织数据', 'warning')
+        return redirect(url_for('positions'))
+
     # 检查是否已存在
     existing = UserPosition.query.filter_by(user_id=user_id, position_id=position_id, organization_id=org_id).first()
     if existing:
@@ -1554,6 +1578,216 @@ def api_position_users(position_id):
 
 
 # ==================== 虚拟组织管理 ====================
+
+
+# ==================== 合同组织分配管理 ====================
+
+@app.route('/contract_organization_assignment')
+@login_required
+def contract_organization_assignment():
+    """合同组织分配管理界面"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+
+    # 统计各组织的合同数量
+    from sqlalchemy import func
+    organization_stats = db.session.query(
+        Contract.organization_id,
+        func.count(Contract.id)
+    ).filter(Contract.customer_id == customer_id).group_by(Contract.organization_id).all()
+
+    # 获取所有组织
+    organizations = Organization.query.filter_by(customer_id=customer_id).all()
+    organizations_dict = {org.id: org.name for org in organizations}
+
+    # 获取未分配组织的合同
+    unassigned_contracts = Contract.query.filter_by(
+        customer_id=customer_id,
+        organization_id=None
+    ).all()
+
+    # 为未分配合同添加创建人名称
+    for contract in unassigned_contracts:
+        if contract.created_by:
+            creator = db.session.get(User, contract.created_by)
+            contract.creator_name = creator.username if creator else None
+        else:
+            contract.creator_name = None
+
+    # 合同总数
+    total_contracts = Contract.query.filter_by(customer_id=customer_id).count()
+
+    return render_template('contract_organization_assignment.html',
+                          organization_stats=organization_stats,
+                          organizations_dict=organizations_dict,
+                          organizations=organizations,
+                          unassigned_contracts=unassigned_contracts,
+                          total_contracts=total_contracts)
+
+
+@app.route('/assign_all_contracts_to_org', methods=['POST'])
+@login_required
+def assign_all_contracts_to_org():
+    """将所有合同分配到同一个组织"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    org_id = int(request.form['organization_id'])
+
+    # 验证组织属于当前租户
+    org = Organization.query.get_or_404(org_id)
+    if org.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('contract_organization_assignment'))
+
+    # 更新所有合同
+    result = Contract.query.filter_by(customer_id=customer_id).update({'organization_id': org_id})
+    db.session.commit()
+
+    flash(f'已将 {result} 个合同分配到"{org.name}"', 'success')
+    return redirect(url_for('contract_organization_assignment'))
+
+
+@app.route('/auto_assign_by_staff', methods=['POST'])
+@login_required
+def auto_assign_by_staff():
+    """根据项目负责人自动分配"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    contracts = Contract.query.filter_by(customer_id=customer_id).all()
+
+    assigned_count = 0
+    for contract in contracts:
+        if contract.project_staff:
+            # 取第一个项目负责人
+            staff_name = contract.project_staff.split(',')[0].strip()
+            user = User.query.filter_by(username=staff_name, customer_id=customer_id).first()
+
+            if user and user.organization_id:
+                contract.organization_id = user.organization_id
+                assigned_count += 1
+
+    db.session.commit()
+    flash(f'已根据项目负责人自动分配 {assigned_count} 个合同', 'success')
+    return redirect(url_for('contract_organization_assignment'))
+
+
+@app.route('/auto_assign_by_creator', methods=['POST'])
+@login_required
+def auto_assign_by_creator():
+    """根据创建人自动分配"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    contracts = Contract.query.filter_by(customer_id=customer_id).all()
+
+    assigned_count = 0
+    for contract in contracts:
+        if contract.created_by:
+            user = db.session.get(User, contract.created_by)
+            if user and user.organization_id:
+                contract.organization_id = user.organization_id
+                assigned_count += 1
+
+    db.session.commit()
+    flash(f'已根据创建人自动分配 {assigned_count} 个合同', 'success')
+    return redirect(url_for('contract_organization_assignment'))
+
+
+@app.route('/clear_all_assignments', methods=['POST'])
+@login_required
+def clear_all_assignments():
+    """清除所有合同的组织分配"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    result = Contract.query.filter_by(customer_id=customer_id).update({'organization_id': None})
+    db.session.commit()
+
+    flash(f'已清除 {result} 个合同的组织分配', 'warning')
+    return redirect(url_for('contract_organization_assignment'))
+
+
+@app.route('/assign_single_contract', methods=['POST'])
+@login_required
+def assign_single_contract():
+    """单个合同分配组织"""
+    if session.get('role') != '超级管理员':
+        flash('权限不足', 'warning')
+        return redirect(url_for('index'))
+
+    customer_id = get_current_customer_id()
+    contract_id = int(request.form['contract_id'])
+    org_id = int(request.form['organization_id'])
+
+    contract = Contract.query.get_or_404(contract_id)
+    org = Organization.query.get_or_404(org_id)
+
+    # 验证权限
+    if contract.customer_id != customer_id or org.customer_id != customer_id:
+        flash('权限不足', 'warning')
+        return redirect(url_for('contract_organization_assignment'))
+
+    contract.organization_id = org_id
+    db.session.commit()
+
+    flash(f'合同"{contract.contract_number}"已分配到"{org.name}"', 'success')
+    return redirect(url_for('contract_organization_assignment'))
+
+
+@app.route('/api/contracts_by_organization/<org_id>')
+@login_required
+def api_contracts_by_organization(org_id):
+    """获取指定组织的合同列表（API）"""
+    if session.get('role') != '超级管理员':
+        return jsonify([])
+
+    customer_id = get_current_customer_id()
+
+    # 查询条件
+    if org_id == 'null':
+        # 未分配组织的合同
+        contracts = Contract.query.filter_by(
+            customer_id=customer_id,
+            organization_id=None
+        ).all()
+    else:
+        # 指定组织的合同
+        org_id = int(org_id)
+        contracts = Contract.query.filter_by(
+            customer_id=customer_id,
+            organization_id=org_id
+        ).all()
+
+    # 转换为JSON
+    result = []
+    for c in contracts:
+        result.append({
+            'id': c.id,
+            'contract_number': c.contract_number,
+            'project_name': c.project_name,
+            'customer_name': c.customer_name,
+            'project_staff': c.project_staff,
+            'total_price': float(c.total_price) if c.total_price else None,
+            'signing_date': c.signing_date.strftime('%Y-%m-%d') if c.signing_date else None
+        })
+
+    return jsonify(result)
+
+
+# ==================== 原有虚拟组织管理 ====================
 
 
 # 新增：带业务类型的新建客户路由
