@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试导出功能</title>
+</head>
+<body>
+    <h2>测试统计导出勾选功能</h2>
+
+    <div>
+        <label><input type="checkbox" id="exp_staff" checked> 按项目负责人统计</label><br>
+        <label><input type="checkbox" id="exp_customer" checked> 按客户名称统计</label><br>
+        <label><input type="checkbox" id="exp_type" checked> 按合同类型统计</label><br>
+        <label><input type="checkbox" id="exp_business" checked> 按业务类型统计</label><br>
+        <label><input type="checkbox" id="exp_status" checked> 按履约状态统计</label><br>
+    </div>
+
+    <button onclick="testExport()">测试导出</button>
+
+    <div id="result" style="margin-top:20px;padding:10px;background:#f0f0f0;"></div>
+
+    <script>
+    function testExport() {
+        var sheets = [];
+        if (document.getElementById('exp_staff').checked) sheets.push('staff');
+        if (document.getElementById('exp_customer').checked) sheets.push('customer');
+        if (document.getElementById('exp_type').checked) sheets.push('type');
+        if (document.getElementById('exp_business').checked) sheets.push('business');
+        if (document.getElementById('exp_status').checked) sheets.push('status');
+
+        if (sheets.length === 0) {
+            alert('请至少选择一项');
+            return;
+        }
+
+        var url = '/statistics/export?sheets=' + sheets.join(',');
+        document.getElementById('result').innerHTML =
+            '生成的URL: <a href="' + url + '" target="_blank">' + url + '</a><br>' +
+            '勾选的sheets: ' + sheets.join(', ');
+
+        // 触发下载
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>筛选条件位置演示</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .demo-container { background: white; padding: 20px; border-radius: 8px; max-width: 1000px; margin: 0 auto; }
+        h2 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .filter-form { border: 1px solid #ddd; padding: 15px; border-radius: 5px; background: #fafafa; }
+        .form-row { display: flex; gap: 15px; margin-bottom: 15px; }
+        .form-group { flex: 1; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+
+        /* 高亮新增的复选框 */
+        .highlight-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .highlight-box label {
+            font-size: 15px;
+            color: #856404;
+            cursor: pointer;
+        }
+        .highlight-box input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+
+        .note {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        .note h3 { margin-top: 0; color: #0c5460; }
+        .arrow {
+            font-size: 24px;
+            color: #ffc107;
+            margin-left: 10px;
+            animation: blink 1.5s infinite;
+        }
+        @keyframes blink {
+            0%, 50%, 100% { opacity: 1; }
+            25%, 75% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h2>📍 "包含已完结合同" 复选框位置演示</h2>
+
+        <div class="filter-form">
+            <h3 style="margin-top:0; color:#007bff;">筛选条件</h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>项目负责人</label>
+                    <input type="text" placeholder="输入负责人姓名">
+                </div>
+                <div class="form-group">
+                    <label>客户名称</label>
+                    <input type="text" placeholder="输入客户名称">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>合同类型</label>
+                    <select>
+                        <option>全部</option>
+                        <option>工程</option>
+                        <option>货物</option>
+                        <option>服务</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>业务类型</label>
+                    <select>
+                        <option>全部</option>
+                        <option>销售</option>
+                        <option>采购</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>履约状态</label>
+                    <select>
+                        <option>全部</option>
+                        <option>进行中</option>
+                        <option>已完结</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>付款状态</label>
+                    <select>
+                        <option>全部</option>
+                        <option>已付款</option>
+                        <option>未付款</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>发票状态</label>
+                    <select>
+                        <option>全部</option>
+                        <option>已开具</option>
+                        <option>未开具</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>预警信息</label>
+                    <select>
+                        <option>全部</option>
+                        <option>有预警</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- ⭐ 新增的复选框 ⭐ -->
+            <div class="highlight-box">
+                <label>
+                    <input type="checkbox" name="include_finished" value="1">
+                    <strong>包含已完结合同</strong>（默认只显示进行中的合同）
+                </label>
+                <span class="arrow">👈 新增功能</span>
+            </div>
+
+            <button class="btn btn-primary">筛选</button>
+            <button class="btn btn-secondary">清除</button>
+        </div>
+
+        <div class="note">
+            <h3>📝 使用说明</h3>
+            <p><strong>位置：</strong>复选框位于所有筛选条件的<strong>最下方</strong>，"筛选"和"清除"按钮的<strong>正上方</strong>（黄色高亮区域）。</p>
+
+            <p><strong>功能：</strong></p>
+            <ul>
+                <li><strong>不勾选</strong>（默认）：只显示<strong>进行中</strong>的合同（日常使用，列表简洁）</li>
+                <li><strong>勾选后</strong>：显示<strong>所有合同</strong>（进行中 + 已完结），用于查询历史、统计数据</li>
+            </ul>
+
+            <p><strong>示例场景：</strong></p>
+            <ul>
+                <li>梁靓（项目部经理）默认看到 9 条进行中合同（付伟龙的项目）</li>
+                <li>勾选"包含已完结合同"后，能看到 11 条合同（包含毕少鹏的 2 条已完结合同）</li>
+            </ul>
+
+            <p><strong>适用页面：</strong></p>
+            <ul>
+                <li>✅ 合同管理首页（登录后默认页面）</li>
+                <li>✅ 合同档案 - 采购合同</li>
+                <li>✅ 合同档案 - 销售合同</li>
+            </ul>
+        </div>
+
+        <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 5px; border-left: 4px solid #007bff;">
+            <strong>💡 提示：</strong>清除浏览器缓存（Ctrl+F5）后刷新页面，即可看到此功能。
+        </div>
+    </div>
+</body>
+</html>

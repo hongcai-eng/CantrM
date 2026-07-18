@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>收付款管理</h2>
+
+<form method="GET" style="background:#f8f9fa;padding:15px;border-radius:4px;margin-bottom:20px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">合同项目</label>
+            <input type="text" name="f_contract" value="{{ filters.f_contract }}" placeholder="项目名称" style="width:150px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">客户名称</label>
+            <input type="text" name="f_customer" value="{{ filters.f_customer }}" placeholder="客户名称" style="width:150px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">合同状态</label>
+            <select name="f_status" style="width:120px;">
+                <option value="">全部</option>
+                <option value="进行中" {% if filters.f_status == '进行中' %}selected{% endif %}>进行中</option>
+                <option value="已完结" {% if filters.f_status == '已完结' %}selected{% endif %}>已完结</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">筛选</button>
+        <a href="{{ url_for('payments_list') }}" class="btn btn-secondary">清空</a>
+    </div>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>合同项目</th>
+            <th>客户名称</th>
+            <th>合同总额</th>
+            <th>已收付款</th>
+            <th>未收付款</th>
+            <th>合同状态</th>
+            <th>收付款记录</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in contracts_with_payments %}
+        <tr>
+            <td><a href="{{ url_for('view_contract', id=item.contract.id) }}">{{ item.contract.project_name }}</a></td>
+            <td>{{ item.contract.customer_name }}</td>
+            <td>{{ item.contract.total_price | notrailzero }}</td>
+            <td style="color:#28a745;">{{ item.total_paid | notrailzero }}</td>
+            <td style="color:{% if item.unpaid > 0 %}#dc3545{% else %}#999{% endif %};">{{ item.unpaid | notrailzero }}</td>
+            <td>{{ item.contract.status }}</td>
+            <td>
+                {% if item.payments %}
+                <div style="max-height:150px;overflow-y:auto;font-size:12px;">
+                    {% for payment in item.payments %}
+                    <div style="border-bottom:1px solid #eee;padding:4px 0;">
+                        <div><strong>{{ payment.amount | notrailzero }}</strong> 元 | {{ payment.payment_date.strftime('%Y-%m-%d') if payment.payment_date else '-' }}</div>
+                        <div style="color:#666;">{{ payment.payment_type or '-' }} | {{ payment.note or '-' }}</div>
+                        <div style="margin-top:2px;">
+                            {% if payment.receipt_file %}
+                            <a href="{{ url_for('download_file', filename=payment.receipt_file) }}" target="_blank" style="font-size:11px;">查看凭证</a> |
+                            {% endif %}
+                            <a href="{{ url_for('edit_payment', pid=payment.id) }}" style="font-size:11px;">编辑</a> |
+                            <form method="POST" action="{{ url_for('delete_payment', pid=payment.id) }}" style="display:inline;">
+                                <button type="submit" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:11px;padding:0;" onclick="return confirm('确定删除？')">删除</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <span style="color:#999;">暂无记录</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="{{ url_for('add_payment', id=item.contract.id) }}" class="btn btn-success" style="padding:4px 8px;font-size:12px;">+ 添加</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="8" style="text-align:center;color:#999;">暂无合同</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

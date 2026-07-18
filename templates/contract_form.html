@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{% if contract %}编辑合同{% else %}新建{{ business_type if business_type else '' }}合同{% endif %}</h2>
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-row">
+        <div class="form-group">
+            <label>合同编号</label>
+            <input type="text" name="contract_number" value="{{ contract.contract_number if contract else '' }}" placeholder="合同唯一标识">
+        </div>
+        <div class="form-group">
+            <label>业务类型</label>
+            <input type="text" value="{{ business_type if business_type else (contract.business_type if contract else '销售') }}" readonly style="background:#f0f0f0;">
+            <input type="hidden" name="business_type" value="{{ business_type if business_type else (contract.business_type if contract else '销售') }}">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>客户名称*</label>
+            <input type="text" name="customer_name" id="customerName" value="{{ contract.customer_name if contract else '' }}" required autocomplete="off">
+            <div id="customerSuggestions" style="border:1px solid #ddd; display:none; position:absolute; background:white; z-index:1000; max-height:200px; overflow-y:auto;"></div>
+            <small style="color:#888;">可从<a href="{{ url_for('customers') }}" target="_blank">客户管理</a>中选择，输入新名称将自动同步</small>
+        </div>
+        <div class="form-group">
+            <label>项目名称*</label>
+            <input type="text" name="project_name" value="{{ contract.project_name if contract else '' }}" required>
+        </div>
+    </div>
+
+    <!-- 新增：多产品动态表单区域 -->
+    <h3 style="margin-top:20px;">产品信息</h3>
+    <div id="productsContainer">
+        {% if contract and contract.products %}
+            {% for cp in contract.products %}
+            <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; display:none;">删除</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>合同类型</label>
+                        <select name="products[contract_type][]" class="contract-type-input">
+                            <option value="">请选择</option>
+                            <option value="工程" {% if cp.contract_type == '工程' %}selected{% endif %}>工程</option>
+                            <option value="货物" {% if cp.contract_type == '货物' %}selected{% endif %}>货物</option>
+                            <option value="服务" {% if cp.contract_type == '服务' %}selected{% endif %}>服务</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>产品类型</label>
+                        <select name="products[product_type][]" class="product-type-input">
+                            <option value="">请选择</option>
+                            <option value="硬件设备" {% if cp.product_type == '硬件设备' %}selected{% endif %}>硬件设备</option>
+                            <option value="软件" {% if cp.product_type == '软件' %}selected{% endif %}>软件</option>
+                            <option value="技术服务" {% if cp.product_type == '技术服务' %}selected{% endif %}>技术服务</option>
+                            <option value="技术开发" {% if cp.product_type == '技术开发' %}selected{% endif %}>技术开发</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="products[product_name][]" class="product-name-input" value="{{ cp.product_name }}" autocomplete="off">
+                        <small style="color:#888;">可从<a href="{{ url_for('products') }}" target="_blank">产品管理</a>中选择</small>
+                    </div>
+                    <div class="form-group">
+                        <label>型号</label>
+                        <input type="text" name="products[model][]" class="model-input" value="{{ cp.model or '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>型号</label>
+                        <input type="text" name="products[model][]" class="model-input" value="{{ cp.model or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>单位</label>
+                        <input type="text" name="products[unit][]" class="unit-input" value="{{ cp.unit or '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.01" name="products[quantity][]" class="quantity-input" value="{{ cp.quantity or '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                    <div class="form-group">
+                        <label>单价</label>
+                        <input type="number" step="0.01" name="products[unit_price][]" class="unit-price-input" value="{{ cp.unit_price or '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>小计</label>
+                        <input type="number" step="0.01" name="products[subtotal][]" class="subtotal-input" value="{{ cp.subtotal or '' }}" readonly style="background:#f0f0f0;">
+                    </div>
+                    <div class="form-group">
+                        <label>税率(%)</label>
+                        <input type="number" step="0.01" name="products[tax_rate][]" value="{{ cp.tax_rate or '' }}">
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; display:none;">删除</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>合同类型</label>
+                        <select name="products[contract_type][]" class="contract-type-input">
+                            <option value="">请选择</option>
+                            <option value="工程">工程</option>
+                            <option value="货物">货物</option>
+                            <option value="服务">服务</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>产品类型</label>
+                        <select name="products[product_type][]" class="product-type-input">
+                            <option value="">请选择</option>
+                            <option value="硬件设备">硬件设备</option>
+                            <option value="软件">软件</option>
+                            <option value="技术服务">技术服务</option>
+                            <option value="技术开发">技术开发</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="products[product_name][]" class="product-name-input" value="{{ contract.product_name if contract else '' }}" autocomplete="off">
+                    </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>型号</label>
+                        <input type="text" name="products[model][]" class="model-input" value="{{ contract.model if contract else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>单位</label>
+                        <input type="text" name="products[unit][]" class="unit-input" value="{{ contract.unit if contract else '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.01" name="products[quantity][]" class="quantity-input" value="{{ contract.quantity if contract else '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                    <div class="form-group">
+                        <label>单价</label>
+                        <input type="number" step="0.01" name="products[unit_price][]" class="unit-price-input" value="{{ contract.unit_price if contract else '' }}" onchange="calcSubtotal(this)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>小计</label>
+                        <input type="number" step="0.01" name="products[subtotal][]" class="subtotal-input" value="" readonly style="background:#f0f0f0;">
+                    </div>
+                    <div class="form-group">
+                        <label>税率(%)</label>
+                        <input type="number" step="0.01" name="products[tax_rate][]" value="{{ contract.tax_rate if contract else '' }}">
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    <button type="button" onclick="addProduct()" class="btn btn-primary" style="margin-bottom:20px;">+ 添加产品</button>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>合同总价*</label>
+            <input type="number" step="0.01" name="total_price" id="totalPrice" value="{{ contract.total_price if contract else '' }}" required>
+            <small style="color:#888;">可手动输入或点击"自动计算"按钮</small>
+        </div>
+        <div class="form-group">
+            <button type="button" onclick="autoCalcTotal()" class="btn btn-secondary" style="margin-top:28px;">自动计算总价</button>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>业务类型</label>
+            <select name="business_type">
+                <option value="销售" {% if contract and contract.business_type == '销售' %}selected{% elif not contract %}selected{% endif %}>销售</option>
+                <option value="采购" {% if contract and contract.business_type == '采购' %}selected{% endif %}>采购</option>
+            </select>
+        </div>
+        <div class="form-group"></div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>项目负责人</label>
+            <input type="text" name="project_staff" value="{{ contract.project_staff if contract else '' }}" placeholder="多人用逗号分隔">
+        </div>
+        <div class="form-group">
+            <label>销售人员</label>
+            <input type="text" name="sales_staff" value="{{ contract.sales_staff if contract else '' }}">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>所属组织/部门</label>
+            <select name="organization_id">
+                <option value="">未分配</option>
+                {% if organizations_list %}
+                    {% for org in organizations_list %}
+                    <option value="{{ org.id }}" {% if contract and contract.organization_id == org.id %}selected{% endif %}>
+                        {{ org.name }}
+                    </option>
+                    {% endfor %}
+                {% endif %}
+            </select>
+            <small style="color:#888;">选择合同所属的组织/部门，用于数据权限控制</small>
+        </div>
+        <div class="form-group"></div>
+    </div>
+    <div class="form-group">
+        <label>合同签订日期</label>
+        <input type="date" name="signing_date" value="{{ contract.signing_date if contract else '' }}">
+    </div>
+    {% if contract %}
+    <div class="form-group">
+        <label>状态</label>
+        <select name="status">
+            <option value="进行中" {% if contract.status == '进行中' %}selected{% endif %}>进行中</option>
+            <option value="已完结" {% if contract.status == '已完结' %}selected{% endif %}>已完结</option>
+        </select>
+    </div>
+    {% endif %}
+    <div class="form-group">
+        <label>合同文件(PDF/扫描件)</label>
+        <input type="file" name="contract_file" accept=".pdf,.jpg,.jpeg,.png" id="contractFile" onchange="previewFile(this, 'contractPreview')">
+        {% if contract and contract.file_path %}
+        <small>当前文件: <a href="{{ url_for('preview_file', filename=contract.file_path) }}" target="_blank">点击预览</a> | <a href="{{ url_for('download_file', filename=contract.file_path) }}">下载</a></small>
+        <div id="contractPreview" style="margin-top:10px;">
+            {% if contract.file_path.endswith(('.jpg','.jpeg','.png')) %}
+            <img src="{{ url_for('preview_file', filename=contract.file_path) }}" style="max-width:300px;">
+            {% elif contract.file_path.endswith('.pdf') %}
+            <iframe src="{{ url_for('preview_file', filename=contract.file_path) }}" width="100%" height="400px" style="border:1px solid #ddd;"></iframe>
+            {% endif %}
+        </div>
+        {% else %}
+        <div id="contractPreview" style="margin-top:10px;"></div>
+        {% endif %}
+    </div>
+    <script>
+    // 产品名称搜索提示（绑定到某个输入框）
+    function bindProductSearch(input) {
+        let suggestBox = input.nextElementSibling;
+        if (!suggestBox || !suggestBox.classList.contains('product-suggestions')) {
+            suggestBox = document.createElement('div');
+            suggestBox.className = 'product-suggestions';
+            suggestBox.style.cssText = 'border:1px solid #ddd;display:none;position:absolute;background:white;z-index:1000;max-height:200px;overflow-y:auto;width:100%;';
+            input.parentNode.style.position = 'relative';
+            input.insertAdjacentElement('afterend', suggestBox);
+        }
+        let t;
+        input.addEventListener('input', function() {
+            clearTimeout(t);
+            const q = this.value;
+            if (q.length < 1) { suggestBox.style.display = 'none'; return; }
+            t = setTimeout(() => {
+                fetch('/api/products/search?q=' + encodeURIComponent(q))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            suggestBox.innerHTML = data.map(p =>
+                                '<div style="padding:8px;cursor:pointer;" onclick="selectProduct(this,\'' +
+                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.category||'').replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
+                                (p.unit||'').replace(/'/g,"&#39;") + '\',' + (p.tax_rate!=null?p.tax_rate:'null') + ',' + (p.ref_quantity!=null?p.ref_quantity:'null') + ',' + (p.ref_unit_price!=null?p.ref_unit_price:'null') + ')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
+                            ).join('');
+                            suggestBox.style.display = 'block';
+                        } else {
+                            suggestBox.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配产品 &nbsp;<a href="/products" target="_blank" style="color:#007bff;font-weight:bold;" onclick="event.stopPropagation();input._productJumped=true;">去产品管理添加 ↗</a></div>';
+                            suggestBox.style.display = 'block';
+                        }
+                    });
+            }, 300);
+        });
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target)) suggestBox.style.display = 'none';
+        });
+        // 从产品管理页返回后自动重新搜索并展示下拉
+        window.addEventListener('focus', function() {
+            if (input._productJumped && input.value.length > 0) {
+                input._productJumped = false;
+                fetch('/api/products/search?q=' + encodeURIComponent(input.value))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            suggestBox.innerHTML = data.map(p =>
+                                '<div style="padding:8px;cursor:pointer;" onclick="selectProduct(this,\'' +
+                                p.name.replace(/'/g,"&#39;") + '\',\'' + (p.category||'').replace(/'/g,"&#39;") + '\',\'' + (p.model||'').replace(/'/g,"&#39;") + '\',\'' +
+                                (p.unit||'').replace(/'/g,"&#39;") + '\',' + (p.tax_rate!=null?p.tax_rate:'null') + ',' + (p.ref_quantity!=null?p.ref_quantity:'null') + ',' + (p.ref_unit_price!=null?p.ref_unit_price:'null') + ')">' + p.name + (p.model ? ' ['+p.model+']' : '') + '</div>'
+                            ).join('');
+                            suggestBox.style.display = 'block';
+                        }
+                    });
+            }
+        });
+    }
+
+    function selectProduct(el, name, category, model, unit, taxRate, refQty, refPrice) {
+        const item = el.closest('.product-item');
+        item.querySelector('.product-name-input').value = name;
+        if (category) item.querySelector('.product-type-input').value = category;
+        if (model) item.querySelector('.model-input').value = model;
+        if (unit) item.querySelector('.unit-input').value = unit;
+        if (taxRate != null) item.querySelector('input[name="products[tax_rate][]"]').value = taxRate;
+        if (refQty != null) item.querySelector('.quantity-input').value = refQty;
+        if (refPrice != null) {
+            item.querySelector('.unit-price-input').value = refPrice;
+            const qty = parseFloat(item.querySelector('.quantity-input').value) || 0;
+            item.querySelector('.subtotal-input').value = (qty * refPrice).toFixed(2);
+        }
+        el.closest('.product-suggestions').style.display = 'none';
+    }
+
+    // 页面加载时绑定已有产品输入框
+    document.querySelectorAll('.product-name-input').forEach(bindProductSearch);
+
+    // 添加产品
+    function addProduct() {
+        const container = document.getElementById('productsContainer');
+        const template = `
+            <div class="product-item" style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:4px; position:relative;">
+                <button type="button" onclick="removeProduct(this)" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">删除</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>合同类型</label>
+                        <select name="products[contract_type][]" class="contract-type-input">
+                            <option value="">请选择</option>
+                            <option value="工程">工程</option>
+                            <option value="货物">货物</option>
+                            <option value="服务">服务</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>产品类型</label>
+                        <select name="products[product_type][]" class="product-type-input">
+                            <option value="">请选择</option>
+                            <option value="硬件设备">硬件设备</option>
+                            <option value="软件">软件</option>
+                            <option value="技术服务">技术服务</option>
+                            <option value="技术开发">技术开发</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="position:relative;">
+                        <label>产品名称</label>
+                        <input type="text" name="products[product_name][]" class="product-name-input" autocomplete="off">
+                        <small style="color:#888;">输入搜索，未找到可<a href="/products" target="_blank">去产品管理添加</a></small>
+                    </div>
+                    <div class="form-group">
+                        <label>型号</label>
+                        <input type="text" name="products[model][]" class="model-input">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>单位</label>
+                        <input type="text" name="products[unit][]" class="unit-input">
+                    </div>
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.01" name="products[quantity][]" class="quantity-input" onchange="calcSubtotal(this)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>单价</label>
+                        <input type="number" step="0.01" name="products[unit_price][]" class="unit-price-input" onchange="calcSubtotal(this)">
+                    </div>
+                    <div class="form-group">
+                        <label>小计</label>
+                        <input type="number" step="0.01" name="products[subtotal][]" class="subtotal-input" readonly style="background:#f0f0f0;">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>税率(%)</label>
+                        <input type="number" step="0.01" name="products[tax_rate][]">
+                    </div>
+                    <div class="form-group"></div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', template);
+        // 绑定新增产品输入框的搜索事件
+        const newInputs = container.querySelectorAll('.product-name-input');
+        bindProductSearch(newInputs[newInputs.length - 1]);
+        // 显示所有删除按钮（当有多个产品时）
+        updateDeleteButtons();
+    }
+
+    // 删除产品
+    function removeProduct(btn) {
+        const items = document.querySelectorAll('.product-item');
+        if (items.length <= 1) {
+            alert('至少保留一个产品');
+            return;
+        }
+        btn.closest('.product-item').remove();
+        updateDeleteButtons();
+    }
+
+    // 更新删除按钮显示状态
+    function updateDeleteButtons() {
+        const items = document.querySelectorAll('.product-item');
+        const deleteButtons = document.querySelectorAll('.product-item button[onclick*="removeProduct"]');
+        deleteButtons.forEach(btn => {
+            btn.style.display = items.length > 1 ? 'block' : 'none';
+        });
+    }
+
+    // 计算单个产品小计
+    function calcSubtotal(input) {
+        const item = input.closest('.product-item');
+        const qty = parseFloat(item.querySelector('.quantity-input').value) || 0;
+        const price = parseFloat(item.querySelector('.unit-price-input').value) || 0;
+        item.querySelector('.subtotal-input').value = (qty * price).toFixed(2);
+    }
+
+    // 自动计算合同总价
+    function autoCalcTotal() {
+        let total = 0;
+        document.querySelectorAll('.subtotal-input').forEach(input => {
+            total += parseFloat(input.value) || 0;
+        });
+        document.getElementById('totalPrice').value = total.toFixed(2);
+    }
+
+    function previewFile(input, previewId) {
+        const preview = document.getElementById(previewId);
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (file.type.startsWith('image/')) {
+                    preview.innerHTML = '<img src="' + e.target.result + '" style="max-width:300px;">';
+                } else if (file.type === 'application/pdf') {
+                    preview.innerHTML = '<embed src="' + e.target.result + '" type="application/pdf" width="100%" height="400px">';
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // 客户名称自动搜索
+    const customerInput = document.getElementById('customerName');
+    const customerSuggestions = document.getElementById('customerSuggestions');
+    let customerTimeout;
+    customerInput.addEventListener('input', function() {
+        clearTimeout(customerTimeout);
+        const query = this.value;
+        if (query.length < 1) {
+            customerSuggestions.style.display = 'none';
+            return;
+        }
+        customerTimeout = setTimeout(() => {
+            fetch('/api/customers/search?q=' + encodeURIComponent(query))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        customerSuggestions.innerHTML = data.map(c =>
+                            '<div style="padding:8px; cursor:pointer;" onclick="selectCustomer(\'' + c.name.replace(/'/g,"&#39;") + '\')">' + c.name + (c.province ? ' (' + c.province + ')' : '') + '</div>'
+                        ).join('');
+                        customerSuggestions.style.display = 'block';
+                    } else {
+                        customerSuggestions.innerHTML = '<div style="padding:8px;color:#888;">未找到匹配客户 &nbsp;<a href="/customers" target="_blank" style="color:#007bff;font-weight:bold;" onclick="window._customerJumped=true;">去客户管理添加 ↗</a></div>';
+                        customerSuggestions.style.display = 'block';
+                    }
+                });
+        }, 300);
+    });
+
+    function selectCustomer(name) {
+        customerInput.value = name;
+        customerSuggestions.style.display = 'none';
+    }
+
+    // 新增：从客户管理页返回后自动重新搜索
+    window.addEventListener('focus', function() {
+        if (window._customerJumped && customerInput.value.length > 0) {
+            window._customerJumped = false;
+            fetch('/api/customers/search?q=' + encodeURIComponent(customerInput.value))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        customerSuggestions.innerHTML = data.map(c =>
+                            '<div style="padding:8px; cursor:pointer;" onclick="selectCustomer(\'' + c.name.replace(/'/g,"&#39;") + '\')">' + c.name + (c.province ? ' (' + c.province + ')' : '') + '</div>'
+                        ).join('');
+                        customerSuggestions.style.display = 'block';
+                    }
+                });
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!customerInput.contains(e.target)) customerSuggestions.style.display = 'none';
+    });
+
+    // 页面加载时初始化删除按钮状态
+    updateDeleteButtons();
+    </script>
+    <button type="submit" class="btn btn-success">保存</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">取消</a>
+</form>
+{% endblock %}

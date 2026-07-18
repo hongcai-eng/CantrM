@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>新建{{ product_type }}产品</h2>
+<form method="POST">
+    <div class="form-row">
+        <div class="form-group">
+            <label>产品名称*</label>
+            <input type="text" name="name" required>
+        </div>
+        <div class="form-group">
+            <label>产品类型</label>
+            <input type="text" value="{{ product_type }}" readonly style="background:#f0f0f0;">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>型号</label>
+            <input type="text" name="model">
+        </div>
+        <div class="form-group">
+            <label>单位</label>
+            <input type="text" name="unit">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>税率(%)</label>
+            <input type="number" step="0.01" name="tax_rate">
+        </div>
+        <div class="form-group">
+            <label>参考数量</label>
+            <input type="number" step="0.01" name="ref_quantity">
+        </div>
+    </div>
+    <div class="form-group">
+        <label>参考单价</label>
+        <input type="number" step="0.01" name="ref_unit_price">
+    </div>
+    <button type="submit" class="btn btn-success">保存</button>
+    <a href="{{ url_for('product_archive', product_type=product_type) }}" class="btn btn-secondary">取消</a>
+</form>
+{% endblock %}

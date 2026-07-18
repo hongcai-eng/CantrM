@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>添加交付记录</h2>
+<p style="color:#666;margin-bottom:20px;">合同项目：<strong>{{ contract.project_name }}</strong> | 客户：{{ contract.customer_name }}</p>
+
+<form method="POST" action="{{ url_for('add_delivery', id=contract.id) }}" enctype="multipart/form-data" style="max-width:800px;">
+    <div class="form-group">
+        <label>交付日期*</label>
+        <input type="date" name="delivery_date" required>
+    </div>
+    <div class="form-group">
+        <label>交付内容</label>
+        <textarea name="content" placeholder="请描述交付内容"></textarea>
+    </div>
+    <div class="form-group">
+        <label>备注</label>
+        <textarea name="note" placeholder="可选"></textarea>
+    </div>
+    <div class="form-group">
+        <label>交付附件</label>
+        <input type="file" name="delivery_file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" multiple>
+        <div style="color:#888;font-size:12px;margin-top:4px;">支持 PDF、图片、Office 文档，可多选</div>
+    </div>
+    <button type="submit" class="btn btn-success">提交</button>
+    <a href="javascript:history.back()" class="btn btn-secondary">取消</a>
+</form>
+{% endblock %}

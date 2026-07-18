@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - {{ system_name|default('客户管理系统') }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .login-box { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .login-header { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 30px; min-height: 56px; }
+        .login-header img { height: 48px; width: auto; }
+        h1 { color: #333; text-align: center; font-size: 24px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; background: #007bff; color: white; font-size: 16px; }
+        .btn:hover { opacity: 0.9; }
+        .alert { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+        .alert-warning { background: #fff3cd; border-left: 4px solid #ffc107; }
+        .alert-success { background: #d4edda; border-left: 4px solid #28a745; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-header" id="loginHeader">
+            {% if company_logo_file %}<img id="brandLogo" src="{{ url_for('static', filename=company_logo_file) }}" alt="logo">{% else %}<img id="brandLogo" src="" alt="logo" style="display:none;">{% endif %}
+            <h1 id="brandName">{% if company_name %}{{ company_name }}<br>{% endif %}{{ system_name|default('客户管理系统') }}</h1>
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <form method="POST" id="loginForm">
+            <div class="form-group">
+                <label>公司</label>
+                <input list="companyList" name="customer_name" id="companyInput" placeholder="输入或选择公司名称"
+                       style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+                <datalist id="companyList">
+                    <option value="">-- 系统管理员 --</option>
+                    {% for t in tenants %}
+                    <option value="{{ t.company_name or t.name }}" data-id="{{ t.id }}">{{ t.company_name or t.name }}</option>
+                    {% endfor %}
+                </datalist>
+                <input type="hidden" name="customer_id" id="customerIdHidden">
+            </div>
+            <div class="form-group">
+                <label>切换账号</label>
+                <input list="accountList" id="accountInput" placeholder="输入或选择已保存的账号"
+                       style="width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+                <datalist id="accountList">
+                    <option value="">-- 选择已记住的账号 --</option>
+                </datalist>
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" name="username" id="usernameInput" required>
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="password" id="passwordInput" required>
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="rememberAccount" style="width:auto;">
+                <label for="rememberAccount" style="margin:0;font-weight:normal;">记住此账号</label>
+            </div>
+            <button type="submit" class="btn">登录</button>
+            <p style="text-align:center;margin-top:15px;font-size:14px;">没有账号？<a href="/register">免费试用30天</a></p>
+        </form>
+        <script>
+        // 公司输入框变化时更新品牌和隐藏字段
+        document.getElementById('companyInput').addEventListener('input', function() {
+            var companyName = this.value.trim();
+
+            // 查找匹配的公司ID
+            var options = document.querySelectorAll('#companyList option');
+            var foundId = '';
+            for (var i = 0; i < options.length; i++) {
+                if (options[i].value === companyName) {
+                    foundId = options[i].getAttribute('data-id') || '';
+                    break;
+                }
+            }
+
+            // 更新隐藏字段
+            document.getElementById('customerIdHidden').value = foundId;
+
+            // 更新品牌显示
+            if (companyName && foundId) {
+                updateBranding(companyName, '');
+            } else if (!companyName) {
+                // 恢复默认品牌
+                document.getElementById('brandLogo').style.display = 'none';
+                document.getElementById('brandName').innerHTML = '{{ system_name|default("客户管理系统") }}';
+            }
+        });
+
+        // 账号输入框变化时自动填充
+        document.getElementById('accountInput').addEventListener('input', function() {
+            var username = this.value.trim();
+
+            // 查找匹配的已保存账号
+            var accounts = JSON.parse(localStorage.getItem('savedAccounts') || '[]');
+            var account = accounts.find(function(a) { return a.username === username; });
+
+            if (account) {
+                document.getElementById('usernameInput').value = account.username;
+                document.getElementById('passwordInput').value = account.password;
+                fetchBranding(account.username);
+            }
+        });
+
+        // 加载已保存的账号到datalist
+        function loadAccounts() {
+            var accounts = JSON.parse(localStorage.getItem('savedAccounts') || '[]');
+            var datalist = document.getElementById('accountList');
+
+            // 清空现有选项（保留第一个提示选项）
+            while (datalist.options.length > 1) {
+                datalist.removeChild(datalist.lastChild);
+            }
+
+            // 添加账号选项
+            accounts.forEach(function(acc) {
+                var option = document.createElement('option');
+                option.value = acc.username;
+                datalist.appendChild(option);
+            });
+        }
+
+        // 获取品牌信息
+        function fetchBranding(username) {
+            if (!username) {
+                updateBranding('', '');
+                return;
+            }
+            fetch('/api/user_branding?username=' + encodeURIComponent(username))
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    if (data.company_name) {
+                        updateBranding(data.company_name, data.logo_url || '');
+                        document.getElementById('companyInput').value = data.company_name;
+
+                        // 查找对应的customer_id
+                        var options = document.querySelectorAll('#companyList option');
+                        for (var i = 0; i < options.length; i++) {
+                            if (options[i].value === data.company_name) {
+                                document.getElementById('customerIdHidden').value = options[i].getAttribute('data-id') || '';
+                                break;
+                            }
+                        }
+                    }
+                })
+                .catch(function(){});
+        }
+
+        // 更新品牌显示
+        function updateBranding(companyName, logoUrl) {
+            var logo = document.getElementById('brandLogo');
+            var nameEl = document.getElementById('brandName');
+            if (logoUrl) {
+                logo.src = logoUrl;
+                logo.style.display = '';
+            } else {
+                logo.src = '';
+                logo.style.display = 'none';
+            }
+            if (companyName) {
+                nameEl.innerHTML = companyName + '<br>{{ system_name|default("客户管理系统") }}';
+            } else {
+                nameEl.innerHTML = '{{ system_name|default("客户管理系统") }}';
+            }
+        }
+
+        // 用户名输入框失焦时更新品牌
+        document.getElementById('usernameInput').addEventListener('blur', function() {
+            var username = this.value.trim();
+            if (username) {
+                fetchBranding(username);
+            }
+        });
+
+        // 表单提交时保存账号信息
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            // 确保customer_id字段正确
+            var companyName = document.getElementById('companyInput').value.trim();
+            if (!companyName) {
+                // 空公司名表示系统管理员
+                document.getElementById('customerIdHidden').value = '';
+            }
+
+            // 保存账号
+            if (document.getElementById('rememberAccount').checked) {
+                var username = document.getElementById('usernameInput').value;
+                var password = document.getElementById('passwordInput').value;
+                var accounts = JSON.parse(localStorage.getItem('savedAccounts') || '[]');
+                var exists = accounts.findIndex(function(a){ return a.username === username; });
+                if (exists >= 0) {
+                    accounts[exists].password = password;
+                } else {
+                    accounts.push({username: username, password: password});
+                }
+                localStorage.setItem('savedAccounts', JSON.stringify(accounts));
+            }
+        });
+
+        // 页面加载时初始化
+        loadAccounts();
+        </script>
+    </div>
+</body>
+</html>

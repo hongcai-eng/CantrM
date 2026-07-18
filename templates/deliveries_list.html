@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>交付管理</h2>
+
+<form method="GET" style="background:#f8f9fa;padding:15px;border-radius:4px;margin-bottom:20px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">合同项目</label>
+            <input type="text" name="f_contract" value="{{ filters.f_contract }}" placeholder="项目名称" style="width:150px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">客户名称</label>
+            <input type="text" name="f_customer" value="{{ filters.f_customer }}" placeholder="客户名称" style="width:150px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">合同状态</label>
+            <select name="f_status" style="width:120px;">
+                <option value="">全部</option>
+                <option value="进行中" {% if filters.f_status == '进行中' %}selected{% endif %}>进行中</option>
+                <option value="已完结" {% if filters.f_status == '已完结' %}selected{% endif %}>已完结</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">筛选</button>
+        <a href="{{ url_for('deliveries_list') }}" class="btn btn-secondary">清空</a>
+    </div>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>合同项目</th>
+            <th>客户名称</th>
+            <th>合同总额</th>
+            <th>交付次数</th>
+            <th>合同状态</th>
+            <th>交付记录</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in contracts_with_deliveries %}
+        <tr>
+            <td><a href="{{ url_for('view_contract', id=item.contract.id) }}">{{ item.contract.project_name }}</a></td>
+            <td>{{ item.contract.customer_name }}</td>
+            <td>{{ item.contract.total_price | notrailzero }}</td>
+            <td>{{ item.delivery_count }}</td>
+            <td>{{ item.contract.status }}</td>
+            <td>
+                {% if item.deliveries %}
+                <div style="max-height:150px;overflow-y:auto;font-size:12px;">
+                    {% for delivery in item.deliveries %}
+                    <div style="border-bottom:1px solid #eee;padding:4px 0;">
+                        <div><strong>{{ delivery.delivery_date.strftime('%Y-%m-%d') if delivery.delivery_date else '-' }}</strong></div>
+                        <div style="color:#666;">内容: {{ delivery.content or '-' }}</div>
+                        <div style="color:#888;">备注: {{ delivery.note or '-' }}</div>
+                        <div style="margin-top:2px;">
+                            {% if delivery.delivery_file %}
+                            <a href="{{ url_for('download_file', filename=delivery.delivery_file) }}" target="_blank" style="font-size:11px;">查看附件</a> |
+                            {% endif %}
+                            <a href="{{ url_for('edit_delivery', did=delivery.id) }}" style="font-size:11px;">编辑</a> |
+                            <form method="POST" action="{{ url_for('delete_delivery', did=delivery.id) }}" style="display:inline;">
+                                <button type="submit" style="background:none;border:none;color:#dc3545;cursor:pointer;font-size:11px;padding:0;" onclick="return confirm('确定删除？')">删除</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <span style="color:#999;">暂无记录</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="{{ url_for('add_delivery', id=item.contract.id) }}" class="btn btn-success" style="padding:4px 8px;font-size:12px;">+ 添加</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" style="text-align:center;color:#999;">暂无合同</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

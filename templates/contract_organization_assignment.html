@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>合同组织分配</h2>
+<p style="color:#888;margin-bottom:20px;">批量管理合同的组织归属，确保用户能看到正确的合同数据</p>
+
+<!-- 统计信息 -->
+<div style="background:#f8f9fa;padding:20px;border-radius:8px;margin-bottom:20px;">
+    <h3>当前分配情况</h3>
+    <table class="table" style="margin-top:10px;">
+        <thead>
+            <tr>
+                <th>组织</th>
+                <th>合同数量</th>
+                <th>占比</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for org_id, count in organization_stats %}
+            <tr>
+                <td>
+                    {% if org_id %}
+                        {{ organizations_dict.get(org_id, '未知组织') }}
+                    {% else %}
+                        <span style="color:#dc3545;">未分配组织</span>
+                    {% endif %}
+                </td>
+                <td>{{ count }}</td>
+                <td>{{ "%.1f"|format(count * 100.0 / total_contracts) }}%</td>
+                <td>
+                    {% if org_id %}
+                    <button onclick="showOrgContracts({{ org_id }}, '{{ organizations_dict.get(org_id) }}')" class="btn btn-sm btn-info">查看合同列表</button>
+                    {% else %}
+                    <button onclick="showUnassignedContracts()" class="btn btn-sm btn-warning">查看未分配合同</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="font-weight:bold;">
+                <td>总计</td>
+                <td>{{ total_contracts }}</td>
+                <td>100%</td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<!-- 合同列表弹窗 -->
+<div id="contractListModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;overflow-y:auto;">
+    <div style="background:white;width:90%;max-width:1200px;margin:50px auto;padding:30px;border-radius:8px;max-height:80vh;overflow-y:auto;">
+        <h3 id="contractListTitle">合同列表</h3>
+        <div id="contractListContent" style="margin-top:20px;">
+            <!-- 动态加载 -->
+        </div>
+        <button type="button" onclick="closeContractList()" class="btn btn-secondary" style="margin-top:20px;">关闭</button>
+    </div>
+</div>
+
+<script>
+// 新增：组织列表（供"调整"改派使用）
+var ORG_OPTIONS = [
+    {% for org in organizations %}{id:{{ org.id }},name:"{{ org.name }}"}{% if not loop.last %},{% endif %}{% endfor %}
+];
+
+// 新增：弹窗列表状态
+var contractListState = { all: [], filtered: [], page: 1, perPage: 10, keyword: '' };
+
+function loadContractList(orgId, title) {
+    document.getElementById('contractListTitle').textContent = title;
+    document.getElementById('contractListContent').innerHTML = '<div style="text-align:center;padding:20px;"><span style="font-size:20px;">⏳</span> 加载中...</div>';
+    document.getElementById('contractListModal').style.display = 'block';
+
+    fetch('/api/contracts_by_organization/' + orgId)
+        .then(r => r.json())
+        .then(data => {
+            contractListState.all = data;
+            contractListState.filtered = data;
+            contractListState.page = 1;
+            contractListState.keyword = '';
+            renderContractList();
+        })
+        .catch(err => {
+            document.getElementById('contractListContent').innerHTML = '<div style="color:#dc3545;padding:20px;">加载失败: ' + err.message + '</div>';
+        });
+}
+
+function showOrgContracts(orgId, orgName) {
+    loadContractList(orgId, orgName + ' - 合同列表');
+}
+
+function showUnassignedContracts() {
+    loadContractList('null', '未分配组织 - 合同列表');
+}
+
+// 新增：渲染工具栏 + 分页表格
+function renderContractList() {
+    var s = contractListState;
+    var list = s.filtered;
+
+    var toolbar = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
+    toolbar += '<button onclick="contractAction(\'view\')" class="btn btn-sm btn-primary">查看</button>';
+    toolbar += '<button onclick="contractAction(\'adjust\')" class="btn btn-sm btn-info">调整</button>';
+    toolbar += '<input type="text" id="clFilter" placeholder="输入关键字筛选" value="' + s.keyword.replace(/"/g,'&quot;') + '" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;">';
+    toolbar += '<button onclick="contractFilter()" class="btn btn-sm btn-secondary">筛选</button>';
+    toolbar += '<span style="margin-left:auto;">每页显示：</span>';
+    toolbar += '<select onchange="contractPerPage(this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;">';
+    [10,20,50,100].forEach(function(n){
+        toolbar += '<option value="' + n + '"' + (s.perPage==n?' selected':'') + '>' + n + '条</option>';
+    });
+    toolbar += '</select></div>';
+
+    if (list.length === 0) {
+        document.getElementById('contractListContent').innerHTML = toolbar + '<div style="color:#999;padding:20px;">暂无合同</div>';
+        return;
+    }
+
+    var totalPages = Math.ceil(list.length / s.perPage);
+    if (s.page > totalPages) s.page = totalPages;
+    if (s.page < 1) s.page = 1;
+    var start = (s.page - 1) * s.perPage;
+    var pageItems = list.slice(start, start + s.perPage);
+
+    var html = toolbar;
+    html += '<table class="table"><thead><tr>';
+    html += '<th style="width:36px;"><input type="checkbox" onclick="contractToggleAll(this)"></th>';
+    html += '<th>序号</th><th>合同编号</th><th>项目名称</th><th>客户名称</th><th>项目负责人</th><th>合同金额</th><th>签订日期</th><th>操作</th>';
+    html += '</tr></thead><tbody>';
+
+    pageItems.forEach(function(c, i){
+        html += '<tr>';
+        html += '<td><input type="checkbox" class="cl-check" value="' + c.id + '"></td>';
+        html += '<td>' + (start + i + 1) + '</td>';
+        html += '<td>' + (c.contract_number || '-') + '</td>';
+        html += '<td>' + (c.project_name || '-') + '</td>';
+        html += '<td>' + (c.customer_name || '-') + '</td>';
+        html += '<td>' + (c.project_staff || '-') + '</td>';
+        html += '<td>' + (c.total_price ? c.total_price.toLocaleString() + ' 元' : '-') + '</td>';
+        html += '<td>' + (c.signing_date || '-') + '</td>';
+        html += '<td><a href="/contract/' + c.id + '" target="_blank" class="btn btn-sm btn-primary">查看详情</a></td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+
+    html += '<div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px;">';
+    html += '<button onclick="contractGoPage(1)" class="btn btn-sm btn-secondary"' + (s.page<=1?' disabled':'') + '>首页</button>';
+    html += '<button onclick="contractGoPage(' + (s.page-1) + ')" class="btn btn-sm btn-secondary"' + (s.page<=1?' disabled':'') + '>上一页</button>';
+    html += '<span style="padding:4px 10px;background:#f0f0f0;border-radius:4px;">第 ' + s.page + ' / ' + totalPages + ' 页（共 ' + list.length + ' 条）</span>';
+    html += '<button onclick="contractGoPage(' + (s.page+1) + ')" class="btn btn-sm btn-secondary"' + (s.page>=totalPages?' disabled':'') + '>下一页</button>';
+    html += '<button onclick="contractGoPage(' + totalPages + ')" class="btn btn-sm btn-secondary"' + (s.page>=totalPages?' disabled':'') + '>末页</button>';
+    html += '</div>';
+
+    document.getElementById('contractListContent').innerHTML = html;
+}
+
+function contractGoPage(p) {
+    contractListState.page = p;
+    renderContractList();
+}
+
+function contractPerPage(n) {
+    contractListState.perPage = parseInt(n);
+    contractListState.page = 1;
+    renderContractList();
+}
+
+function contractFilter() {
+    var kw = (document.getElementById('clFilter').value || '').trim().toLowerCase();
+    contractListState.keyword = kw;
+    contractListState.filtered = kw ? contractListState.all.filter(function(c){
+        return [c.contract_number, c.project_name, c.customer_name, c.project_staff]
+            .some(function(v){ return v && v.toLowerCase().indexOf(kw) >= 0; });
+    }) : contractListState.all;
+    contractListState.page = 1;
+    renderContractList();
+}
+
+function contractToggleAll(cb) {
+    document.querySelectorAll('.cl-check').forEach(function(c){ c.checked = cb.checked; });
+}
+
+function getCheckedContractIds() {
+    return Array.from(document.querySelectorAll('.cl-check:checked')).map(function(c){ return c.value; });
+}
+
+function contractAction(type) {
+    var ids = getCheckedContractIds();
+    if (ids.length === 0) { alert('请先勾选合同'); return; }
+
+    if (type === 'view') {
+        ids.forEach(function(id){ window.open('/contract/' + id, '_blank'); });
+    } else if (type === 'adjust') {
+        if (ids.length !== 1) { alert('调整组织请仅勾选一条合同'); return; }
+        var opts = ORG_OPTIONS.map(function(o){ return o.id + '：' + o.name; }).join('\n');
+        var input = prompt('请输入要调整到的组织ID：\n' + opts);
+        if (!input) return;
+        var orgId = parseInt(input);
+        if (!ORG_OPTIONS.some(function(o){ return o.id === orgId; })) { alert('无效的组织ID'); return; }
+
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{{ url_for('assign_single_contract') }}";
+        form.innerHTML = '<input type="hidden" name="contract_id" value="' + ids[0] + '">' +
+                         '<input type="hidden" name="organization_id" value="' + orgId + '">';
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function closeContractList() {
+    document.getElementById('contractListModal').style.display = 'none';
+}
+</script>
+
+<!-- 批量分配操作 -->
+<div style="background:white;padding:20px;border:1px solid #ddd;border-radius:8px;margin-bottom:20px;">
+    <h3>批量分配方式</h3>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:20px;">
+        <!-- 方式1 -->
+        <div style="border:1px solid #ddd;padding:15px;border-radius:4px;">
+            <h4 style="margin-top:0;color:#007bff;">全部分配到同一组织</h4>
+            <p style="color:#666;font-size:14px;">适合：所有合同属于同一部门</p>
+            <form method="POST" action="{{ url_for('assign_all_contracts_to_org') }}" style="margin-top:10px;">
+                <select name="organization_id" required style="width:100%;padding:8px;margin-bottom:10px;">
+                    <option value="">-- 选择组织 --</option>
+                    {% for org in organizations %}
+                    <option value="{{ org.id }}">{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary" onclick="return confirm('确认将所有合同分配到该组织？')">执行分配</button>
+            </form>
+        </div>
+
+        <!-- 方式2 -->
+        <div style="border:1px solid #ddd;padding:15px;border-radius:4px;">
+            <h4 style="margin-top:0;color:#28a745;">根据项目负责人自动分配</h4>
+            <p style="color:#666;font-size:14px;">根据项目负责人的组织自动分配合同</p>
+            <form method="POST" action="{{ url_for('auto_assign_by_staff') }}" style="margin-top:10px;">
+                <button type="submit" class="btn btn-success" onclick="return confirm('确认根据项目负责人自动分配？')">自动分配</button>
+            </form>
+            <p style="color:#888;font-size:12px;margin-top:10px;">仅分配有项目负责人的合同</p>
+        </div>
+
+        <!-- 方式3 -->
+        <div style="border:1px solid #ddd;padding:15px;border-radius:4px;">
+            <h4 style="margin-top:0;color:#17a2b8;">根据创建人自动分配</h4>
+            <p style="color:#666;font-size:14px;">根据合同创建人的组织自动分配</p>
+            <form method="POST" action="{{ url_for('auto_assign_by_creator') }}" style="margin-top:10px;">
+                <button type="submit" class="btn btn-info" onclick="return confirm('确认根据创建人自动分配？')">自动分配</button>
+            </form>
+            <p style="color:#888;font-size:12px;margin-top:10px;">仅分配有创建人记录的合同</p>
+        </div>
+
+        <!-- 方式4 -->
+        <div style="border:1px solid #ddd;padding:15px;border-radius:4px;">
+            <h4 style="margin-top:0;color:#ffc107;">清除所有分配</h4>
+            <p style="color:#666;font-size:14px;">清除所有合同的组织归属</p>
+            <form method="POST" action="{{ url_for('clear_all_assignments') }}" style="margin-top:10px;">
+                <button type="submit" class="btn btn-warning" onclick="return confirm('确认清除所有合同的组织分配？此操作不可恢复！')">清除分配</button>
+            </form>
+            <p style="color:#888;font-size:12px;margin-top:10px;">用于重新开始分配</p>
+        </div>
+    </div>
+</div>
+
+<!-- 未分配合同列表 -->
+{% if unassigned_contracts %}
+<div style="background:white;padding:20px;border:1px solid #ddd;border-radius:8px;">
+    <h3>未分配组织的合同 ({{ unassigned_contracts|length }})</h3>
+    <p style="color:#dc3545;margin-bottom:15px;">这些合同未分配组织，用户可能看不到</p>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>合同编号</th>
+                <th>项目名称</th>
+                <th>项目负责人</th>
+                <th>创建人</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for contract in unassigned_contracts[:20] %}
+            <tr>
+                <td>{{ contract.contract_number }}</td>
+                <td>{{ contract.project_name }}</td>
+                <td>{{ contract.project_staff or '-' }}</td>
+                <td>{{ contract.creator_name or '-' }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('assign_single_contract') }}" style="display:inline;">
+                        <input type="hidden" name="contract_id" value="{{ contract.id }}">
+                        <select name="organization_id" required style="padding:4px;margin-right:5px;">
+                            <option value="">-- 选择组织 --</option>
+                            {% for org in organizations %}
+                            <option value="{{ org.id }}">{{ org.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-primary">分配</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if unassigned_contracts|length > 20 %}
+            <tr>
+                <td colspan="5" style="text-align:center;color:#888;">
+                    仅显示前20条，共{{ unassigned_contracts|length }}条未分配合同
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% endblock %}

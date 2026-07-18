@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>添加发票记录</h2>
+<p style="color:#666;margin-bottom:20px;">合同项目：<strong>{{ contract.project_name }}</strong> | 客户：{{ contract.customer_name }}</p>
+
+<form method="POST" action="{{ url_for('add_invoice', id=contract.id) }}" enctype="multipart/form-data" style="max-width:800px;">
+    <div class="form-group">
+        <label>发票金额*</label>
+        <input type="number" step="0.01" name="amount" required placeholder="请输入金额">
+    </div>
+    <div class="form-group">
+        <label>收票日期*</label>
+        <input type="date" name="received_date" required>
+    </div>
+    <div class="form-group">
+        <label>发票号</label>
+        <input type="text" name="invoice_number" placeholder="可选">
+    </div>
+    <div class="form-group">
+        <label>发票状态*</label>
+        <select name="invoice_status">
+            <option value="未开具">未开具</option>
+            <option value="已开具">已开具</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label>发票类型*</label>
+        <select name="invoice_type">
+            <option value="普票">普票</option>
+            <option value="专票">专票</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label>备注</label>
+        <textarea name="note" placeholder="可选"></textarea>
+    </div>
+    <div class="form-group">
+        <label>发票附件</label>
+        <input type="file" name="invoice_file" accept=".pdf,.jpg,.jpeg,.png" multiple>
+        <div style="color:#888;font-size:12px;margin-top:4px;">支持 PDF、JPG、PNG 格式，可多选</div>
+    </div>
+    <button type="submit" class="btn btn-success">提交</button>
+    <a href="javascript:history.back()" class="btn btn-secondary">取消</a>
+</form>
+{% endblock %}
