@@ -483,6 +483,9 @@ def login():
         customer_id = request.form.get('customer_id', '').strip()
         customer_name = request.form.get('customer_name', '').strip()
 
+        # 调试日志
+        print(f"[LOGIN DEBUG] 用户名: {username}, 公司名: {customer_name}, 公司ID: {customer_id}")
+
         # 如果提供了customer_id，直接使用
         # 否则，如果提供了customer_name，通过名称查找customer_id
         if not customer_id and customer_name:
@@ -491,13 +494,19 @@ def login():
             ).first()
             if tenant:
                 customer_id = str(tenant.id)
+                print(f"[LOGIN DEBUG] 通过公司名找到租户ID: {customer_id}")
+            else:
+                print(f"[LOGIN DEBUG] 未找到公司名为 {customer_name} 的租户")
 
         if customer_id:
             user = User.query.filter_by(username=username, customer_id=int(customer_id)).first()
+            print(f"[LOGIN DEBUG] 查找用户 (customer_id={customer_id}): {'找到' if user else '未找到'}")
         else:
             user = User.query.filter_by(username=username, customer_id=None).first()
+            print(f"[LOGIN DEBUG] 查找系统管理员用户: {'找到' if user else '未找到'}")
 
         if user and user.check_password(password):
+            print(f"[LOGIN DEBUG] 密码验证成功")
             # 检查试用期
             if user.customer_id:
                 tenant = db.session.get(TenantCustomer, user.customer_id)
@@ -511,6 +520,11 @@ def login():
             if username == 'superadmin':
                 return redirect(url_for('tenant_management'))
             return redirect(url_for('index'))
+        else:
+            if user:
+                print(f"[LOGIN DEBUG] 用户存在但密码错误")
+            else:
+                print(f"[LOGIN DEBUG] 用户不存在")
         flash('用户名或密码错误', 'warning')
     return render_template('login.html', tenants=tenants, system_name=system_name)
 
