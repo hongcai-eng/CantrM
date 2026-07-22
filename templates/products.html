@@ -111,56 +111,61 @@
     </tbody>
 </table>
 
-<div id="editForm" style="display:none; margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
-    <h3>编辑产品</h3>
-    <form method="POST" id="editFormAction">
-        <div class="form-row">
-            <div class="form-group">
-                <label>产品名称</label>
-                <input type="text" name="name" id="editName" required>
+<!-- 编辑产品弹窗 -->
+<div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:white; padding:30px; border-radius:8px; width:90%; max-width:600px; max-height:90vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+        <h3 style="margin-bottom:20px;">编辑产品</h3>
+        <form method="POST" id="editFormAction">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>产品名称</label>
+                    <input type="text" name="name" id="editName" required>
+                </div>
+                <div class="form-group">
+                    <label>产品类型</label>
+                    <select name="category" id="editCategory" required>
+                        <option value="硬件设备">硬件设备</option>
+                        <option value="软件">软件</option>
+                        <option value="技术服务">技术服务</option>
+                        <option value="技术开发">技术开发</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>型号</label>
+                    <input type="text" name="model" id="editModel">
+                </div>
+                <div class="form-group">
+                    <label>单位</label>
+                    <input type="text" name="unit" id="editUnit">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>税率(%)</label>
+                    <input type="number" step="0.01" name="tax_rate" id="editTaxRate">
+                </div>
+                <div class="form-group">
+                    <label>参考数量</label>
+                    <input type="number" step="0.01" name="ref_quantity" id="editRefQuantity">
+                </div>
             </div>
             <div class="form-group">
-                <label>产品类型</label>
-                <select name="category" id="editCategory" required>
-                    <option value="硬件设备">硬件设备</option>
-                    <option value="软件">软件</option>
-                    <option value="技术服务">技术服务</option>
-                    <option value="技术开发">技术开发</option>
-                </select>
+                <label>参考单价</label>
+                <input type="number" step="0.01" name="ref_unit_price" id="editRefUnitPrice">
             </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label>型号</label>
-                <input type="text" name="model" id="editModel">
+            <div style="margin-top:20px;">
+                <button type="submit" class="btn btn-success">保存</button>
+                <button type="button" onclick="closeEditModal()" class="btn btn-secondary">取消</button>
             </div>
-            <div class="form-group">
-                <label>单位</label>
-                <input type="text" name="unit" id="editUnit">
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label>税率(%)</label>
-                <input type="number" step="0.01" name="tax_rate" id="editTaxRate">
-            </div>
-            <div class="form-group">
-                <label>参考数量</label>
-                <input type="number" step="0.01" name="ref_quantity" id="editRefQuantity">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>参考单价</label>
-            <input type="number" step="0.01" name="ref_unit_price" id="editRefUnitPrice">
-        </div>
-        <button type="submit" class="btn btn-success">保存</button>
-        <button type="button" onclick="document.getElementById('editForm').style.display='none'" class="btn btn-secondary">取消</button>
-    </form>
+        </form>
+    </div>
 </div>
 
 <script>
 function editProduct(id, name, category, model, unit, taxRate, refQuantity, refUnitPrice) {
-    document.getElementById('editForm').style.display = 'block';
+    document.getElementById('editModal').style.display = 'flex';
     document.getElementById('editFormAction').action = '/product/' + id + '/edit';
     document.getElementById('editName').value = name;
     document.getElementById('editCategory').value = category;
@@ -169,6 +174,9 @@ function editProduct(id, name, category, model, unit, taxRate, refQuantity, refU
     document.getElementById('editTaxRate').value = taxRate || '';
     document.getElementById('editRefQuantity').value = refQuantity || '';
     document.getElementById('editRefUnitPrice').value = refUnitPrice || '';
+}
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
 }
 </script>
 {% endblock %}

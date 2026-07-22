@@ -2,7 +2,9 @@
 {% block content %}
 <div style="margin-bottom: 20px;">
     {% if session.username != 'superadmin' %}
+    {% if user_permissions == 'all' or '增加' in user_permissions or '增加-合同' in user_permissions %}
     <a href="{{ url_for('new_contract') }}" class="btn btn-primary">新建合同</a>
+    {% endif %}
     {% endif %}
     {% if user_permissions == 'all' or '导入EXCEL' in user_permissions %}
     <a href="{{ url_for('import_contracts') }}" class="btn btn-success">导入Excel</a>

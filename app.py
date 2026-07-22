@@ -194,12 +194,12 @@ def has_permission(user_id, permission):
     检查用户是否拥有指定的功能权限
     参数：
         user_id: 用户ID
-        permission: 权限名称（如 '增加', '删除', '修改', '查阅', '下载', '增加-收付款'）
+        permission: 权限名称（如 '增加', '删除', '修改', '查阅', '下载', '增加-收付款', '导入EXCEL'）
     返回：True/False
 
-    支持新旧权限格式：
+    支持新旧权限格式双向兼容：
     - 旧格式权限 '增加' 可以匹配新格式检查 '增加-合同'（向下兼容）
-    - 新格式权限 '增加-合同' 不能匹配旧格式检查 '增加'（精确控制）
+    - 新格式权限 '增加-合同' 也可以匹配旧格式检查 '增加'（向上兼容）
     """
     permissions = get_user_function_permissions(user_id)
 
@@ -217,6 +217,13 @@ def has_permission(user_id, permission):
         base_permission = permission.split('-')[0]  # 提取 '增加-收付款' 中的 '增加'
         if base_permission in permissions:
             return True
+
+    # 新增：如果检查的是旧格式权限（如 '导入EXCEL'），但用户有新格式权限（如 '导入EXCEL-合同'）
+    # 则认为有权限（向上兼容新系统）
+    if '-' not in permission:
+        for perm in permissions:
+            if perm.startswith(permission + '-'):
+                return True
 
     return False
 
@@ -3078,7 +3085,15 @@ def new_contract():
 @app.route('/contract/<int:id>')
 @login_required
 def view_contract(id):
-    contract = Contract.query.get_or_404(id)
+    from sqlalchemy.orm import joinedload
+
+    # 使用joinedload预加载关联数据，避免N+1查询问题
+    contract = Contract.query.options(
+        joinedload(Contract.products),
+        joinedload(Contract.payments),
+        joinedload(Contract.deliveries),
+        joinedload(Contract.invoices)
+    ).get_or_404(id)
 
     # 租户隔离检查
     customer_id = get_current_customer_id()
@@ -3086,10 +3101,10 @@ def view_contract(id):
         flash('权限不足', 'warning')
         return redirect(url_for('index'))
 
-    # 数据权限检查
+    # 数据权限检查（包含已完结合同）
     user_id = session.get('user_id')
     if user_id and customer_id is not None:
-        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id, include_finished=True)
         if accessible_ids is not None and id not in accessible_ids:
             flash('您没有权限查看该合同', 'warning')
             return redirect(url_for('index'))
@@ -3100,7 +3115,15 @@ def view_contract(id):
 @app.route('/contract/<int:id>/manage')
 @login_required
 def manage_contract(id):
-    contract = Contract.query.get_or_404(id)
+    from sqlalchemy.orm import joinedload
+
+    # 使用joinedload预加载关联数据，避免N+1查询问题
+    contract = Contract.query.options(
+        joinedload(Contract.products),
+        joinedload(Contract.payments),
+        joinedload(Contract.deliveries),
+        joinedload(Contract.invoices)
+    ).get_or_404(id)
 
     # 租户隔离检查
     customer_id = get_current_customer_id()
@@ -3115,9 +3138,9 @@ def manage_contract(id):
         flash('您没有权限管理该合同', 'warning')
         return redirect(url_for('index'))
 
-    # 数据权限检查
+    # 数据权限检查（包含已完结合同）
     if user_id and customer_id is not None:
-        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id)
+        accessible_ids = get_user_accessible_contract_ids(user_id, customer_id, include_finished=True)
         app.logger.info(f"数据权限检查: user_id={user_id}, contract_id={id}, accessible_ids={'全部' if accessible_ids is None else accessible_ids}")
         if accessible_ids is not None and id not in accessible_ids:
             app.logger.warning(f"数据权限检查失败: contract_id={id} 不在可访问列表中")
@@ -4146,13 +4169,25 @@ def sysconfig():
 @app.route('/preview/<filename>')
 @login_required
 def preview_file(filename):
-    user_id = session['user_id']
-    if not has_permission(user_id, '查阅'):
-        flash('权限不足', 'warning')
-        return redirect(url_for('index'))
+    user_id = session.get('user_id')
+
+    # 检查查阅权限：有任何 '查阅' 权限或 'all' 权限即可
+    permissions = get_user_function_permissions(user_id)
+    if permissions != 'all':
+        # 检查是否有查阅相关权限
+        has_view_perm = '查阅' in permissions or any(p.startswith('查阅-') for p in permissions)
+        if not has_view_perm:
+            flash('权限不足', 'warning')
+            return redirect(url_for('index'))
+
     from flask import Response
     import mimetypes
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+    if not os.path.exists(file_path):
+        flash('文件不存在或已被删除', 'warning')
+        return redirect(request.referrer or url_for('index'))
+
     mimetype = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
     with open(file_path, 'rb') as f:
         response = Response(f.read(), mimetype=mimetype)
